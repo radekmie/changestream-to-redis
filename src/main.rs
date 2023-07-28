@@ -120,6 +120,7 @@ impl Mongo {
             .watch(pipeline, options)
             .await?
             .with_type();
+        println!("Mongo connection initialized.",);
         Ok(Self { change_stream })
     }
 
@@ -140,6 +141,7 @@ impl Redis {
             redis::Client::open(std::env::var("REDIS_URL").expect("REDIS_URL is required"))?
                 .get_async_connection()
                 .await?;
+        println!("Redis connection initialized.",);
         let script = redis::Script::new(
             r#"redis.call("PUBLISH", KEYS[1], ARGV[1])
                redis.call("PUBLISH", KEYS[1] .. '::' .. KEYS[2], ARGV[1])"#,
@@ -148,12 +150,6 @@ impl Redis {
     }
 
     async fn publish(&mut self, event: Event) -> Result<(), redis::RedisError> {
-        println!(
-            "{}::{} {}",
-            event.ns,
-            event.id,
-            event.op.clone().into_meteor_ejson()
-        );
         self.script
             .key(event.ns)
             .key(event.id)
@@ -175,7 +171,16 @@ async fn main() {
         }
     });
 
+    let debug = std::env::var("DEBUG").is_ok();
     while let Some(event) = receiver.recv().await {
+        if debug {
+            println!(
+                "{}::{} {}",
+                event.ns,
+                event.id,
+                event.op.clone().into_meteor_ejson()
+            );
+        }
         redis.publish(event).await.unwrap();
     }
 }
