@@ -23,6 +23,9 @@ This program listens to a [MongoDB Change Stream](https://www.mongodb.com/docs/m
     * (optional) `FULL_DOCUMENT`.
         * If not set, only IDs will be sent to Redis, i.e., it will behave just like `oplogtoredis`.
         * If set, it has to be [one of the values accepted by MongoDB](https://www.mongodb.com/docs/manual/reference/method/db.collection.watch/) (`required`, `updateLookup`, or `whenAvailable`), and you can configure your collections to use [`protectAgainstRaceConditions: false`](https://github.com/cult-of-coders/redis-oplog/blob/master/docs/finetuning.md#configuration-at-collection-level).
+    * (optional) `FULL_DOCUMENT_COLLECTIONS`, e.g., `notifications,users`.
+        * If not set, there will be one change stream, fetching full documents from all collections, according to the `FULL_DOCUMENT` flag.
+        * If set, there will be two change streams. First, listening to the configured collections, fetching full documents when available (i.e., inserts) and according to the `FULL_DOCUMENT` flag. Second will listen to other collections, fetching only their IDs.
 
 ## Limitations
 

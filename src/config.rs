@@ -1,6 +1,6 @@
 use mongodb::options::FullDocumentType;
 use serde_json::from_str;
-use std::env::var;
+use std::{env::var, vec::Vec};
 
 pub struct Config {
     /// If true, all events are logged before being sent to Redis.
@@ -14,8 +14,13 @@ pub struct Config {
     /// the same time. Both `updateLookup` and `required` variants incur an additional performance
     /// cost, but it's most likely less than an additional query coming from the outside. Having
     /// the whole document in Redis allows us to use the `protectAgainstRaceConditions: false` in
-    /// the app, skipping the database call entirely.
+    /// the app, skipping the database call entirely. If `full_document_collections` is set, only
+    /// those collections will have all of the fields included.
     pub full_document: Option<FullDocumentType>,
+    /// If set, `changelog-to-redis` will create two change streams -- one for ID-only collections
+    /// and one for `full_document` collections. If `full_document` is not be set, only some
+    /// operations will have all of the fields (i.e., inserts).
+    pub full_document_collections: Option<Vec<String>>,
     pub mongo_url: String,
     pub redis_url: String,
 }
@@ -30,6 +35,9 @@ impl Config {
             full_document: var("FULL_DOCUMENT")
                 .ok()
                 .map(|value| from_str(format!("\"{value}\"").as_str()).unwrap()),
+            full_document_collections: var("FULL_DOCUMENT_COLLECTIONS")
+                .ok()
+                .map(|value| value.split(',').map(ToString::to_string).collect()),
             redis_url: var("REDIS_URL").expect("REDIS_URL is required"),
             mongo_url: var("MONGO_URL").expect("MONGO_URL is required"),
         }
