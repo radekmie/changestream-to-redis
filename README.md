@@ -18,6 +18,8 @@ This program listens to a [MongoDB Change Stream](https://www.mongodb.com/docs/m
     * (required) `REDIS_URL`, e.g., `redis://localhost:6379/1`.
     * (optional) `DEBUG`.
         * If set, all events are logged before being sent to Redis.
+    * (optional) `DEDUPLICATION`, e.g., `120`.
+        * If set, all events are deduplicated on Redis. That allows you to deploy multiple instances of `oplogtoredis` listening to the same MongoDB database and pushing to the same Redis database.
     * (optional) `FULL_DOCUMENT`.
         * If not set, only IDs will be sent to Redis, i.e., it will behave just like `oplogtoredis`.
         * If set, it has to be [one of the values accepted by MongoDB](https://www.mongodb.com/docs/manual/reference/method/db.collection.watch/) (`required`, `updateLookup`, or `whenAvailable`), and you can configure your collections to use [`protectAgainstRaceConditions: false`](https://github.com/cult-of-coders/redis-oplog/blob/master/docs/finetuning.md#configuration-at-collection-level).
@@ -25,7 +27,6 @@ This program listens to a [MongoDB Change Stream](https://www.mongodb.com/docs/m
 ## Limitations
 
 * **No change stream resumption.** It is planned, but at the moment the program is entirely stateless.
-* **No high availability (HA).** There is no deduplication of the Redis messages, so setting up more than one `changestream-to-redis` instance with the same configuration will result in duplicated messages. It is a deliberate choice, since we have been using `oplogtoredis` in production without HA and never encountered any issues.
 * **No error handling.** As soon as the change stream or Redis communication fails, the program exits. It is planned, though `changestream-to-redis` is meant to restart as soon as it exits.
 * **No monitoring.** There is no monitoring of any kind, but both a healt-checking endpoint and [Prometheus](https://prometheus.io) metrics are planned.
 

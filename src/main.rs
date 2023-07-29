@@ -52,6 +52,7 @@ impl IntoMeteorEJSON for bson::Bson {
 
 #[derive(serde::Deserialize)]
 struct Event {
+    _id: bson::Bson,
     ns: String,
     id: String,
     op: bson::Bson,
@@ -132,6 +133,7 @@ impl Mongo {
 
 struct Redis {
     connection: redis::aio::Connection,
+    deduplication: Option<u32>,
     script: redis::Script,
 }
 
@@ -142,20 +144,42 @@ impl Redis {
                 .get_async_connection()
                 .await?;
         println!("Redis connection initialized.",);
-        let script = redis::Script::new(
-            r#"redis.call("PUBLISH", KEYS[1], ARGV[1])
-               redis.call("PUBLISH", KEYS[1] .. '::' .. KEYS[2], ARGV[1])"#,
-        );
-        Ok(Self { connection, script })
+        let deduplication = std::env::var("DEDUPLICATION")
+            .ok()
+            .map(|value| value.parse().unwrap());
+        let script = redis::Script::new(if deduplication.is_some() {
+            r#"
+                if redis.call("GET", KEYS[1]) == false then
+                    redis.call("SETEX", KEYS[1], ARGV[4], 1)
+                    redis.call("PUBLISH", ARGV[1], ARGV[3])
+                    redis.call("PUBLISH", ARGV[1] .. '::' .. ARGV[2], ARGV[3])
+                end
+            "#
+        } else {
+            r#"
+                redis.call("PUBLISH", ARGV[1], ARGV[3])
+                redis.call("PUBLISH", ARGV[1] .. '::' .. ARGV[2], ARGV[3])
+            "#
+        });
+        Ok(Self {
+            connection,
+            deduplication,
+            script,
+        })
     }
 
     async fn publish(&mut self, event: Event) -> Result<(), redis::RedisError> {
-        self.script
-            .key(event.ns)
-            .key(event.id)
-            .arg(event.op.into_meteor_ejson().to_string())
-            .invoke_async(&mut self.connection)
-            .await
+        let mut invocation = self.script.prepare_invoke();
+        invocation.arg(event.ns);
+        invocation.arg(event.id);
+        invocation.arg(event.op.into_meteor_ejson().to_string());
+
+        if let Some(deduplication) = self.deduplication {
+            invocation.arg(deduplication);
+            invocation.key(event._id.to_string());
+        }
+
+        invocation.invoke_async(&mut self.connection).await
     }
 }
 
