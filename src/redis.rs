@@ -35,7 +35,7 @@ impl Redis {
     }
 
     pub async fn publish(&mut self, config: &Config, event: Event) -> Result<(), RedisError> {
-        let Event { _id, ns, id, op } = event;
+        let Event { ev, ns, id, op } = event;
         if config.debug {
             println!("{}::{} {}", ns, id, op.clone().into_ejson());
         }
@@ -47,7 +47,7 @@ impl Redis {
 
         if let Some(deduplication) = config.deduplication {
             invocation.arg(deduplication);
-            invocation.key(_id.to_string());
+            invocation.key(ev.to_string());
         }
 
         invocation.invoke_async(&mut self.connection).await

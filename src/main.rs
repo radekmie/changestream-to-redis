@@ -1,3 +1,11 @@
+#![deny(clippy::complexity)]
+#![deny(clippy::correctness)]
+#![deny(clippy::nursery)]
+#![deny(clippy::pedantic)]
+#![deny(clippy::perf)]
+#![deny(clippy::style)]
+#![deny(clippy::suspicious)]
+
 mod config;
 mod ejson;
 mod event;
