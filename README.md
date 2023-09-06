@@ -3,10 +3,7 @@
 ![CI](https://github.com/radekmie/changestream-to-redis/actions/workflows/ci.yml/badge.svg)
 ![Publish](https://github.com/radekmie/changestream-to-redis/actions/workflows/publish.yml/badge.svg)
 
-> **Warning**
-> The project is currently in its alpha phase. There are no production loads using it yet nor any large-scale tests were conducted. I do **not** recommend going live with it yet.
-
-This program listens to a [MongoDB Change Stream](https://www.mongodb.com/docs/manual/changeStreams/), and publishes changes to Redis. It is designed to work with the [`cultofcoders:redis-oplog`](https://github.com/cult-of-coders/redis-oplog) Meteor package and meant as an alternative to to [`oplogtoredis`](https://github.com/tulip/oplogtoredis) with support for [`protectAgainstRaceConditions: false`](https://github.com/cult-of-coders/redis-oplog/blob/master/docs/finetuning.md#configuration-at-collection-level).
+This program listens to a [MongoDB Change Stream](https://www.mongodb.com/docs/manual/changeStreams/), and publishes changes to Redis. It is designed to work with the [`cultofcoders:redis-oplog`](https://github.com/cult-of-coders/redis-oplog) Meteor package and meant as an alternative to [`oplogtoredis`](https://github.com/tulip/oplogtoredis) with support for [`protectAgainstRaceConditions: false`](https://github.com/cult-of-coders/redis-oplog/blob/master/docs/finetuning.md#configuration-at-collection-level).
 
 ## Setup
 
@@ -31,7 +28,17 @@ This program listens to a [MongoDB Change Stream](https://www.mongodb.com/docs/m
 
 * **No change stream resumption.** It is planned, but at the moment the program is entirely stateless.
 * **No error handling.** As soon as the change stream or Redis communication fails, the program exits. It is planned, though `changestream-to-redis` is meant to restart as soon as it exits.
-* **No monitoring.** There is no monitoring of any kind, but both a healt-checking endpoint and [Prometheus](https://prometheus.io) metrics are planned.
+* **No monitoring.** There is no monitoring of any kind, but both a health-checking endpoint and [Prometheus](https://prometheus.io) metrics are planned.
+
+## Performance
+
+As reported on [Meteor forums](https://forums.meteor.com/t/introduction-of-changestream-to-redis/60269/8?u=radekmie), after a couple of weeks in a pre-production environment and a week in a production one, the performance is significantly better than `oplogtoredis`'s:
+* **4x CPU and 5x RAM reduction in a pre-production environment** with low traffic and occasional peaks (e.g., migrations).
+* **2x CPU and 4x RAM reduction in a production environment** with high traffic and regular peaks (e.g., migrations and cron jobs).
+* **60% cost reduction in a production environment** by using a smaller instance (x0.5) and ARM CPU (x0.8). The production environment uses the currently smallest AWS Fargate instance (0.25 CPU / 0.5GB RAM) and stays below 2% CPU (on average) and 0.8% RAM (at all times).
+* Stabler CPU and RAM usage (the latter stays the same for hours and even days).
+
+Remember: your mileage may vary!
 
 ## Development
 
