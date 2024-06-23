@@ -1,5 +1,5 @@
 use crate::{ejson::Ejson, event::Event, Config};
-use redis::{aio::Connection, Client, RedisError, Script};
+use redis::{aio::MultiplexedConnection, Client, RedisError, Script};
 
 const SCRIPT_WITH_DEDUPLICATION: &str = r#"
     if redis.call("GET", KEYS[1]) == false then
@@ -15,14 +15,14 @@ const SCRIPT_WITHOUT_DEDUPLICATION: &str = r#"
 "#;
 
 pub struct Redis {
-    connection: Connection,
+    connection: MultiplexedConnection,
     script: Script,
 }
 
 impl Redis {
     pub async fn new(config: &Config) -> Result<Self, RedisError> {
         let connection = Client::open(config.redis_url.as_str())?
-            .get_async_connection()
+            .get_multiplexed_async_connection()
             .await?;
 
         println!("Redis connection initialized.");
@@ -35,7 +35,7 @@ impl Redis {
     }
 
     pub async fn publish(&mut self, config: &Config, event: Event) -> Result<(), RedisError> {
-        let Event { ev, ns, id, op } = event;
+        let Event { ev, ns, id, op, .. } = event;
         if config.debug {
             println!("{}::{} {}", ns, id, op.clone().into_ejson());
         }

@@ -5,22 +5,28 @@ use std::{env::var, vec::Vec};
 pub struct Config {
     /// If true, all events are logged before being sent to Redis.
     pub debug: bool,
-    /// If present, all events are deduplicated on Redis. That allows you to deploy multiple
-    /// instances of `oplogtoredis` listening to the same MongoDB database and pushing to the same
-    /// Redis database.
+    /// If present, all events are deduplicated on Redis. That allows you to
+    /// deploy multiple instances of `changestream-to-redis` listening to the
+    /// same MongoDB database and pushing to the same Redis database.
     pub deduplication: Option<usize>,
-    /// By default, only the `_id` field is present, matching the `oplogtoredis` behavior. However,
-    /// thanks to the `fullDocument` option in change streams, we can get the entire document at
-    /// the same time. Both `updateLookup` and `required` variants incur an additional performance
-    /// cost, but it's most likely less than an additional query coming from the outside. Having
-    /// the whole document in Redis allows us to use the `protectAgainstRaceConditions: false` in
-    /// the app, skipping the database call entirely. If `full_document_collections` is set, only
-    /// those collections will have all of the fields included.
+    /// By default, only the `_id` field is present, matching the `oplogtoredis`
+    /// behavior. However, thanks to the `fullDocument` option in change
+    /// streams, we can get the entire document at the same time. Both
+    /// `updateLookup` and `required` variants incur an additional performance
+    /// cost, but it's most likely less than an additional query coming from the
+    /// outside. Having the whole document in Redis allows us to use the
+    /// `protectAgainstRaceConditions: false` in the app, skipping the database
+    /// call entirely. If `full_document_collections` is set, only those
+    /// collections will have all of the fields included.
     pub full_document: Option<FullDocumentType>,
-    /// If set, `changelog-to-redis` will create two change streams -- one for ID-only collections
-    /// and one for `full_document` collections. If `full_document` is not be set, only some
-    /// operations will have all of the fields (i.e., inserts).
+    /// If set, `changestream-to-redis` will create two change streams -- one
+    /// for ID-only collections and one for `full_document` collections. If
+    /// `full_document` is not be set, only some operations will have all of the
+    /// fields (i.e., inserts).
     pub full_document_collections: Option<Vec<String>>,
+    /// If set, `changestream-to-redis` will expose Prometheus metrics at this
+    /// address.
+    pub metrics_address: Option<String>,
     pub mongo_url: String,
     pub redis_url: String,
 }
@@ -38,8 +44,9 @@ impl Config {
             full_document_collections: var("FULL_DOCUMENT_COLLECTIONS")
                 .ok()
                 .map(|value| value.split(',').map(ToString::to_string).collect()),
-            redis_url: var("REDIS_URL").expect("REDIS_URL is required"),
+            metrics_address: var("METRICS_ADDRESS").ok(),
             mongo_url: var("MONGO_URL").expect("MONGO_URL is required"),
+            redis_url: var("REDIS_URL").expect("REDIS_URL is required"),
         }
     }
 }

@@ -81,6 +81,7 @@ fn create_pipeline(config: &Config, primary: bool) -> [bson::Document; 2] {
     [
         doc! {"$match": query},
         doc! {"$project": {
+            "ct": "$clusterTime",
             // The ID is stringified to support `ObjectID`s.
             "id": {"$toString": "$documentKey._id"},
             // All changes are published in their collection's channel and a subscope with

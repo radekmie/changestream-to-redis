@@ -23,6 +23,8 @@ This program listens to a [MongoDB Change Stream](https://www.mongodb.com/docs/m
     * (optional) `FULL_DOCUMENT_COLLECTIONS`, e.g., `notifications,users`.
         * If not set, there will be one change stream, fetching full documents from all collections, according to the `FULL_DOCUMENT` flag.
         * If set, there will be two change streams. First, listening to the configured collections, fetching full documents when available (i.e., inserts) and according to the `FULL_DOCUMENT` flag. Second will listen to other collections, fetching only their IDs.
+    * (optional) `METRICS_ADDRESS`, e.g., `0.0.0.0:4000`.
+        * If set, `changestream-to-redis` will expose Prometheus metrics at this address.
 
 ## Limitations
 
