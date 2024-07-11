@@ -17,6 +17,8 @@ This program listens to a [MongoDB Change Stream](https://www.mongodb.com/docs/m
         * If set, all events are logged before being sent to Redis.
     * (optional) `DEDUPLICATION`, e.g., `120`.
         * If set, all events are deduplicated on Redis. That allows you to deploy multiple instances of `oplogtoredis` listening to the same MongoDB database and pushing to the same Redis database.
+    * (optional) `EXCLUDED_COLLECTIONS`, e.g., `exports,logs`.
+        * If set, events from these collections will be ignored (i.e., won't get published to Redis). It allows you reduce `changestream-to-redis` and Redis load by ignoring write-intensive collections that don't require reactivity.
     * (optional) `FULL_DOCUMENT`.
         * If not set, only IDs will be sent to Redis, i.e., it will behave just like `oplogtoredis`.
         * If set, it has to be [one of the values accepted by MongoDB](https://www.mongodb.com/docs/manual/reference/method/db.collection.watch/) (`required`, `updateLookup`, or `whenAvailable`), and you can configure your collections to use [`protectAgainstRaceConditions: false`](https://github.com/cult-of-coders/redis-oplog/blob/master/docs/finetuning.md#configuration-at-collection-level).

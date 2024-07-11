@@ -9,6 +9,11 @@ pub struct Config {
     /// deploy multiple instances of `changestream-to-redis` listening to the
     /// same MongoDB database and pushing to the same Redis database.
     pub deduplication: Option<usize>,
+    /// If set, events from these collections will be ignored (i.e., won't get
+    /// published to Redis). It allows you reduce `changestream-to-redis` and
+    /// Redis load by ignoring write-intensive collections that don't require
+    /// reactivity.
+    pub excluded_collections: Option<Vec<String>>,
     /// By default, only the `_id` field is present, matching the `oplogtoredis`
     /// behavior. However, thanks to the `fullDocument` option in change
     /// streams, we can get the entire document at the same time. Both
@@ -38,6 +43,9 @@ impl Config {
             deduplication: var("DEDUPLICATION")
                 .ok()
                 .map(|value| value.parse().unwrap()),
+            excluded_collections: var("EXCLUDED_COLLECTIONS")
+                .ok()
+                .map(|value| value.split(',').map(ToString::to_string).collect()),
             full_document: var("FULL_DOCUMENT")
                 .ok()
                 .map(|value| from_str(format!("\"{value}\"").as_str()).unwrap()),

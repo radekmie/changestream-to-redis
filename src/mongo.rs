@@ -64,7 +64,11 @@ fn create_pipeline(config: &Config, primary: bool) -> [bson::Document; 2] {
         "operationType": {"$in": ["delete", "insert", "replace", "update"]},
     };
 
-    // 3. Match the collection filter if there's any.
+    // 3. Match the collection filters if there's any.
+    if let Some(names) = config.excluded_collections.clone() {
+        query.insert("ns.coll", doc! { "$nin": names });
+    }
+
     if let Some(names) = config.full_document_collections.clone() {
         let operator = if primary { "$in" } else { "$nin" };
         query.insert("ns.coll", doc! { operator: names });
