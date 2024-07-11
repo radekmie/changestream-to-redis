@@ -16,7 +16,7 @@ This program listens to a [MongoDB Change Stream](https://www.mongodb.com/docs/m
     * (optional) `DEBUG`.
         * If set, all events are logged before being sent to Redis.
     * (optional) `DEDUPLICATION`, e.g., `120`.
-        * If set, all events are deduplicated on Redis. That allows you to deploy multiple instances of `oplogtoredis` listening to the same MongoDB database and pushing to the same Redis database.
+        * If set, all events are deduplicated on Redis. That allows you to deploy multiple instances of `changestream-to-redis` listening to the same MongoDB database and pushing to the same Redis database.
     * (optional) `EXCLUDED_COLLECTIONS`, e.g., `exports,logs`.
         * If set, events from these collections will be ignored (i.e., won't get published to Redis). It allows you reduce `changestream-to-redis` and Redis load by ignoring write-intensive collections that don't require reactivity.
     * (optional) `FULL_DOCUMENT`.
