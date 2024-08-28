@@ -16,7 +16,7 @@ This program listens to a [MongoDB Change Stream](https://www.mongodb.com/docs/m
     * (optional) `DEBUG`.
         * If set, all events are logged before being sent to Redis.
     * (optional) `DEDUPLICATION`, e.g., `120`.
-        * If set, all events are deduplicated on Redis. That allows you to deploy multiple instances of `changestream-to-redis` listening to the same MongoDB database and pushing to the same Redis database.
+        * If set, all events are deduplicated on Redis for this amount of seconds. That allows you to deploy multiple instances of `changestream-to-redis` listening to the same MongoDB database and pushing to the same Redis database.
     * (optional) `EXCLUDED_COLLECTIONS`, e.g., `exports,logs`.
         * If set, events from these collections will be ignored (i.e., won't get published to Redis). It allows you reduce `changestream-to-redis` and Redis load by ignoring write-intensive collections that don't require reactivity.
     * (optional) `FULL_DOCUMENT`.
@@ -27,12 +27,15 @@ This program listens to a [MongoDB Change Stream](https://www.mongodb.com/docs/m
         * If set, there will be two change streams. First, listening to the configured collections, fetching full documents when available (i.e., inserts) and according to the `FULL_DOCUMENT` flag. Second will listen to other collections, fetching only their IDs.
     * (optional) `METRICS_ADDRESS`, e.g., `0.0.0.0:4000`.
         * If set, `changestream-to-redis` will expose Prometheus metrics at this address.
+    * (optional) `REDIS_BATCH_SIZE`, default `1`.
+        * If set, it overrides the default Redis batch size, leading to an increased throughput at a cost of increased latency (larger batches result in fewer but larger requests sent to Redis).
+    * (optional) `REDIS_QUEUE_SIZE`, default `1024`.
+        * If set, it overrides the default Redis queue size, accepting the MongoDB events earlier and temporarily storing them in memory.
 
 ## Limitations
 
 * **No change stream resumption.** It is planned, but at the moment the program is entirely stateless.
 * **No error handling.** As soon as the change stream or Redis communication fails, the program exits. It is planned, though `changestream-to-redis` is meant to restart as soon as it exits.
-* **No monitoring.** There is no monitoring of any kind, but both a health-checking endpoint and [Prometheus](https://prometheus.io) metrics are planned.
 
 ## Performance
 
