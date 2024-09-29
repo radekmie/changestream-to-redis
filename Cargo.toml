@@ -10,7 +10,6 @@ bson = { version = "2.11.0", default-features = false }
 futures-util = { version = "0.3.28", default-features = false }
 hyper = { version = "1.3.1", default-features = false, features = ["http1", "server"] }
 hyper-util = { version = "0.1.5", default-features = false, features = ["tokio"] }
-lazy_static = { version = "1.5.0", default-features = false }
 mongodb = { version = "2.8.2", default-features = false, features = ["tokio-runtime"] }
 prometheus = { version = "0.13.4", default-features = false }
 redis = { version = "0.25.4", default-features = false, features = ["script", "tokio-comp"] }

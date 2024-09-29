@@ -33,6 +33,8 @@ pub struct Config {
     /// address.
     pub metrics_address: Option<String>,
     pub mongo_url: String,
+    pub redis_batch_size: usize,
+    pub redis_queue_size: usize,
     pub redis_url: String,
 }
 
@@ -54,6 +56,12 @@ impl Config {
                 .map(|value| value.split(',').map(ToString::to_string).collect()),
             metrics_address: var("METRICS_ADDRESS").ok(),
             mongo_url: var("MONGO_URL").expect("MONGO_URL is required"),
+            redis_batch_size: var("REDIS_BATCH_SIZE")
+                .ok()
+                .map_or(1, |value| value.parse().unwrap()),
+            redis_queue_size: var("REDIS_QUEUE_SIZE")
+                .ok()
+                .map_or(1024, |value| value.parse().unwrap()),
             redis_url: var("REDIS_URL").expect("REDIS_URL is required"),
         }
     }

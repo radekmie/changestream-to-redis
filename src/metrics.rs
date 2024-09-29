@@ -1,20 +1,17 @@
 use hyper::{body::Incoming, server::conn::http1::Builder, service::service_fn, Request, Response};
 use hyper_util::rt::TokioIo;
-use lazy_static::lazy_static;
 use prometheus::{
     gather, register_int_counter, register_int_gauge, Encoder, IntCounter, IntGauge, TextEncoder,
 };
-use std::convert::Infallible;
+use std::{convert::Infallible, sync::LazyLock};
 use tokio::{net::TcpListener, spawn};
 
-lazy_static! {
-    pub static ref LAST_EVENT_GAUGE: IntGauge =
-        register_int_gauge!("last_event", "Timestamp of last MongoDB event").unwrap();
-    pub static ref MONGO_COUNTER: IntCounter =
-        register_int_counter!("mongo", "Number of MongoDB events").unwrap();
-    pub static ref REDIS_COUNTER: IntCounter =
-        register_int_counter!("redis", "Number of Redis invokes").unwrap();
-}
+pub static LAST_EVENT_GAUGE: LazyLock<IntGauge> =
+    LazyLock::new(|| register_int_gauge!("last_event", "Timestamp of last MongoDB event").unwrap());
+pub static MONGO_COUNTER: LazyLock<IntCounter> =
+    LazyLock::new(|| register_int_counter!("mongo", "Number of MongoDB events").unwrap());
+pub static REDIS_COUNTER: LazyLock<IntCounter> =
+    LazyLock::new(|| register_int_counter!("redis", "Number of Redis invokes").unwrap());
 
 pub async fn serve(address: String) {
     let listener = TcpListener::bind(address).await.unwrap();
