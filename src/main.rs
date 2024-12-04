@@ -41,9 +41,13 @@ async fn main() {
     let mut batch = Vec::with_capacity(batch_size);
     while receiver.recv_many(&mut batch, batch_size).await != 0 {
         REDIS_COUNTER.inc_by(batch.len() as u64);
-        redis
-            .publish(&config, replace(&mut batch, Vec::with_capacity(batch_size)))
-            .await
-            .unwrap();
+
+        let events = replace(&mut batch, Vec::with_capacity(batch_size));
+
+        // Try to send. If it fails, immediately try again, since the `redis` crate will retry the connection (with a timeout)
+        if let Err(e) = redis.publish(&config, &events).await {
+            eprintln!("Redis error: {e:?}");
+            redis.publish(&config, &events).await.unwrap();
+        }
     }
 }

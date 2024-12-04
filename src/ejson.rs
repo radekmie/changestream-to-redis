@@ -3,14 +3,14 @@ use bson::Bson;
 use serde_json::{json, Value};
 
 pub trait Ejson {
-    fn into_ejson(self) -> Value;
+    fn to_ejson(&self) -> Value;
 }
 
 impl Ejson for Bson {
-    fn into_ejson(self) -> Value {
+    fn to_ejson(&self) -> Value {
         match self {
             // Meteor EJSON serialization.
-            Self::Binary(v) => json!({ "$binary": STANDARD.encode(v.bytes)}),
+            Self::Binary(v) => json!({ "$binary": STANDARD.encode(&v.bytes)}),
             Self::DateTime(v) => json!({ "$date": v.timestamp_millis() }),
             Self::Decimal128(v) => json!({ "$type": "Decimal", "$value": v.to_string() }),
             Self::Double(v) if v.is_infinite() => json!({ "$InfNaN": v.signum() }),
@@ -19,11 +19,13 @@ impl Ejson for Bson {
             Self::RegularExpression(v) => json!({ "$regexp": v.pattern, "$flags": v.options }),
 
             // Standard JSON serialization.
-            Self::Array(v) => Value::Array(v.into_iter().map(Ejson::into_ejson).collect()),
+            Self::Array(v) => Value::Array(v.iter().map(Ejson::to_ejson).collect()),
             Self::Boolean(v) => json!(v),
-            Self::Document(v) => {
-                Value::Object(v.into_iter().map(|(k, v)| (k, v.into_ejson())).collect())
-            }
+            Self::Document(v) => Value::Object(
+                v.into_iter()
+                    .map(|(k, v)| (k.clone(), v.to_ejson()))
+                    .collect(),
+            ),
             Self::Double(v) => json!(v),
             Self::Int32(v) => json!(v),
             Self::Int64(v) => json!(v),

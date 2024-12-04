@@ -1,5 +1,7 @@
+use std::time::Duration;
+
 use crate::{ejson::Ejson, event::Event, Config};
-use redis::{aio::MultiplexedConnection, Client, RedisError, Script};
+use redis::{aio::ConnectionManager, Client, RedisError, Script};
 
 const SCRIPT_WITH_DEDUPLICATION: &str = r#"
     for index = 1, tonumber(ARGV[1]) do
@@ -21,14 +23,20 @@ const SCRIPT_WITHOUT_DEDUPLICATION: &str = r#"
 "#;
 
 pub struct Redis {
-    connection: MultiplexedConnection,
+    connection: ConnectionManager,
     script: Script,
 }
 
 impl Redis {
     pub async fn new(config: &Config) -> Result<Self, RedisError> {
         let connection = Client::open(config.redis_url.as_str())?
-            .get_multiplexed_async_connection()
+            .get_tokio_connection_manager_with_backoff_and_timeouts(
+                2,
+                100,
+                6,
+                Duration::from_secs(config.redis_response_timeout),
+                Duration::from_secs(config.redis_connection_timeout),
+            )
             .await?;
 
         println!("Redis connection initialized.");
@@ -40,10 +48,10 @@ impl Redis {
         Ok(Self { connection, script })
     }
 
-    pub async fn publish(&mut self, config: &Config, events: Vec<Event>) -> Result<(), RedisError> {
+    pub async fn publish(&mut self, config: &Config, events: &[Event]) -> Result<(), RedisError> {
         if config.debug {
-            for Event { ns, id, op, .. } in &events {
-                println!("{}::{} {}", ns, id, op.clone().into_ejson());
+            for Event { ns, id, op, .. } in events {
+                println!("{}::{} {}", ns, id, op.to_ejson());
             }
         }
 
@@ -53,7 +61,7 @@ impl Redis {
         for Event { ev, ns, id, op, .. } in events {
             invocation.arg(ns);
             invocation.arg(id);
-            invocation.arg(op.into_ejson().to_string());
+            invocation.arg(op.to_ejson().to_string());
 
             if let Some(deduplication) = config.deduplication {
                 invocation.arg(deduplication);

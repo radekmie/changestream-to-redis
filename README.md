@@ -31,6 +31,10 @@ This program listens to a [MongoDB Change Stream](https://www.mongodb.com/docs/m
         * If set, it overrides the default Redis batch size, leading to an increased throughput at a cost of increased latency (larger batches result in fewer but larger requests sent to Redis).
     * (optional) `REDIS_QUEUE_SIZE`, default `1024`.
         * If set, it overrides the default Redis queue size, accepting the MongoDB events earlier and temporarily storing them in memory.
+    * (optional) `REDIS_RESPONSE_TIMEOUT_SECS`, default `5`.
+        * [See docs](https://docs.rs/redis/latest/redis/aio/struct.ConnectionManager.html#method.new_with_backoff_and_timeouts)
+    * (optional) `REDIS_CONNECTION_TIMEOUT_SECS`, default `2`.
+        * [See docs](https://docs.rs/redis/latest/redis/aio/struct.ConnectionManager.html#method.new_with_backoff_and_timeouts)
 
 ## Limitations
 

@@ -36,6 +36,8 @@ pub struct Config {
     pub redis_batch_size: usize,
     pub redis_queue_size: usize,
     pub redis_url: String,
+    pub redis_response_timeout: u64,
+    pub redis_connection_timeout: u64,
 }
 
 impl Config {
@@ -63,6 +65,12 @@ impl Config {
                 .ok()
                 .map_or(1024, |value| value.parse().unwrap()),
             redis_url: var("REDIS_URL").expect("REDIS_URL is required"),
+            redis_response_timeout: var("REDIS_RESPONSE_TIMEOUT_SECS")
+                .ok()
+                .map_or(5, |value| value.parse().unwrap()),
+            redis_connection_timeout: var("REDIS_CONNECTION_TIMEOUT_SECS")
+                .ok()
+                .map_or(2, |value| value.parse().unwrap()),
         }
     }
 }
