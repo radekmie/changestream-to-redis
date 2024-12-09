@@ -1,11 +1,14 @@
-use crate::{config::Config, event::Event};
+use crate::{
+    config::Config,
+    event::{ChangeStreamEvent, RedisEvent},
+};
 use bson::doc;
 use futures_util::StreamExt;
 use mongodb::{change_stream::ChangeStream, error::Error, options::ChangeStreamOptions, Client};
 
 pub struct Mongo {
-    stream1: ChangeStream<Event>,
-    stream2: Option<ChangeStream<Event>>,
+    stream1: ChangeStream<ChangeStreamEvent>,
+    stream2: Option<ChangeStream<ChangeStreamEvent>>,
 }
 
 impl Mongo {
@@ -21,15 +24,20 @@ impl Mongo {
         Ok(Self { stream1, stream2 })
     }
 
-    /// Polls the next `Event` from either of change streams.
-    pub async fn next(&mut self) -> Result<Option<Event>, Error> {
+    /// Polls the next `RedisEvent` from either of change streams.
+    pub async fn next(&mut self) -> Result<Option<RedisEvent>, Error> {
         let Self { stream1, stream2 } = self;
+
+        let to_redis_event = |e: Result<Option<ChangeStreamEvent>, Error>| {
+            e.map(|e| e.map(std::convert::Into::into))
+        };
+
         match stream2 {
-            None => stream1.next().await.transpose(),
+            None => to_redis_event(stream1.next().await.transpose()),
             Some(stream2) => tokio::select! {
                 biased;
-                event = stream1.next() => event.transpose(),
-                event = stream2.next() => event.transpose(),
+                event = stream1.next() => to_redis_event(event.transpose()),
+                event = stream2.next() => to_redis_event(event.transpose()),
             },
         }
     }
@@ -39,7 +47,7 @@ async fn create_change_stream(
     client: &Client,
     config: &Config,
     primary: bool,
-) -> Result<ChangeStream<Event>, Error> {
+) -> Result<ChangeStream<ChangeStreamEvent>, Error> {
     // Only the primary stream will receive full documents, and only if the `full_document` is set.
     let options = primary.then(|| {
         ChangeStreamOptions::builder()

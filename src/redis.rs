@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use crate::{ejson::Ejson, event::Event, Config};
+use crate::{event::RedisEvent, Config};
 use redis::{
     aio::{ConnectionManager, ConnectionManagerConfig},
     Client, RedisError, Script,
@@ -49,20 +49,24 @@ impl Redis {
         Ok(Self { connection, script })
     }
 
-    pub async fn publish(&mut self, config: &Config, events: &[Event]) -> Result<(), RedisError> {
+    pub async fn publish(
+        &mut self,
+        config: &Config,
+        events: &[RedisEvent],
+    ) -> Result<(), RedisError> {
         if config.debug {
-            for Event { ns, id, op, .. } in events {
-                println!("{}::{} {}", ns, id, op.to_ejson());
+            for RedisEvent { ns, id, op, .. } in events {
+                println!("{ns}::{id} {op:?}");
             }
         }
 
         let mut invocation = self.script.prepare_invoke();
         invocation.arg(events.len());
 
-        for Event { ev, ns, id, op, .. } in events {
+        for RedisEvent { ev, ns, id, op, .. } in events {
             invocation.arg(ns);
             invocation.arg(id);
-            invocation.arg(op.to_ejson().to_string());
+            invocation.arg(op.to_string());
 
             if let Some(deduplication) = config.deduplication {
                 invocation.arg(deduplication);
