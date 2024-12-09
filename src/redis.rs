@@ -1,7 +1,5 @@
 #![allow(clippy::module_name_repetitions)]
 
-use std::time::Duration;
-
 use crate::{ejson::Ejson, event::Event, Config};
 use redis::{
     aio::{ConnectionManager, ConnectionManagerConfig},
@@ -37,15 +35,22 @@ pub struct Redis {
 
 impl Redis {
     pub async fn new(config: &Config) -> Result<Self, RedisError> {
+        let mut connection_config = ConnectionManagerConfig::new()
+            .set_response_timeout(config.redis_response_timeout)
+            .set_connection_timeout(config.redis_connection_timeout)
+            .set_number_of_retries(config.redis_connection_retry_count);
+
+        if let Some(max_delay) = config.redis_max_delay {
+            // The Redis crate internally converts this back into a Duration, so this should be fine
+            #[allow(clippy::cast_possible_truncation)]
+            let max_delay_ms = max_delay.as_millis() as u64;
+
+            connection_config = connection_config.set_max_delay(max_delay_ms);
+        }
+
         let connection = RedisConnection(
             Client::open(config.redis_url.as_str())?
-                .get_connection_manager_with_config(
-                    ConnectionManagerConfig::new()
-                        .set_response_timeout(Duration::from_secs(config.redis_response_timeout))
-                        .set_connection_timeout(Duration::from_secs(
-                            config.redis_connection_timeout,
-                        )),
-                )
+                .get_connection_manager_with_config(connection_config)
                 .await?,
         );
 

@@ -1,6 +1,6 @@
 use mongodb::options::FullDocumentType;
 use serde_json::from_str;
-use std::{env::var, vec::Vec};
+use std::{env::var, time::Duration, vec::Vec};
 
 pub struct Config {
     /// If true, all events are logged before being sent to Redis.
@@ -36,8 +36,11 @@ pub struct Config {
     pub redis_batch_size: usize,
     pub redis_queue_size: usize,
     pub redis_url: String,
-    pub redis_response_timeout: u64,
-    pub redis_connection_timeout: u64,
+    pub redis_response_timeout: Duration,
+    pub redis_connection_timeout: Duration,
+    pub redis_max_delay: Option<Duration>,
+    pub redis_connection_retry_count: usize,
+    pub redis_publish_retry_count: usize,
 }
 
 impl Config {
@@ -65,12 +68,25 @@ impl Config {
                 .ok()
                 .map_or(1024, |value| value.parse().unwrap()),
             redis_url: var("REDIS_URL").expect("REDIS_URL is required"),
-            redis_response_timeout: var("REDIS_RESPONSE_TIMEOUT_SECS")
+            redis_response_timeout: Duration::from_secs(
+                var("REDIS_RESPONSE_TIMEOUT_SECS")
+                    .ok()
+                    .map_or(5, |value| value.parse().unwrap()),
+            ),
+            redis_connection_timeout: Duration::from_secs(
+                var("REDIS_CONNECTION_TIMEOUT_SECS")
+                    .ok()
+                    .map_or(2, |value| value.parse().unwrap()),
+            ),
+            redis_max_delay: var("REDIS_MAX_DELAY_SECS")
                 .ok()
-                .map_or(5, |value| value.parse().unwrap()),
-            redis_connection_timeout: var("REDIS_CONNECTION_TIMEOUT_SECS")
+                .map(|value| Duration::from_secs(value.parse().unwrap())),
+            redis_connection_retry_count: var("REDIS_CONNECTION_RETRY_COUNT")
                 .ok()
-                .map_or(2, |value| value.parse().unwrap()),
+                .map_or(6, |value| value.parse().unwrap()),
+            redis_publish_retry_count: var("REDIS_PUBLISH_RETRY_COUNT")
+                .ok()
+                .map_or(1, |value| value.parse().unwrap()),
         }
     }
 }

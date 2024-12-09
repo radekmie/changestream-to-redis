@@ -35,6 +35,12 @@ This program listens to a [MongoDB Change Stream](https://www.mongodb.com/docs/m
         * [See docs](https://docs.rs/redis/latest/redis/aio/struct.ConnectionManagerConfig.html#method.set_response_timeout)
     * (optional) `REDIS_CONNECTION_TIMEOUT_SECS`, default `2`.
         * [See docs](https://docs.rs/redis/latest/redis/aio/struct.ConnectionManagerConfig.html#method.set_connection_timeout)
+    * (optional) `REDIS_MAX_DELAY_SECS`, default `2`.
+        * [See docs](https://docs.rs/redis/latest/redis/aio/struct.ConnectionManagerConfig.html#method.set_max_delay)
+    * (optional) `REDIS_CONNECTION_RETRY_COUNT`, default `6`.
+        * [See docs](https://docs.rs/redis/latest/redis/aio/struct.ConnectionManagerConfig.html#method.set_number_of_retries)
+    * (optional) `REDIS_PUBLISH_RETRY_COUNT`, default `1`.
+        * The amount of times a publication to Redis can be retried.
 
 ## Limitations
 
