@@ -10,7 +10,7 @@ impl Ejson for Bson {
     fn into_ejson(self) -> Value {
         match self {
             // Meteor EJSON serialization.
-            Self::Binary(v) => json!({ "$binary": STANDARD.encode(&v.bytes)}),
+            Self::Binary(v) => json!({ "$binary": STANDARD.encode(v.bytes)}),
             Self::DateTime(v) => json!({ "$date": v.timestamp_millis() }),
             Self::Decimal128(v) => json!({ "$type": "Decimal", "$value": v.to_string() }),
             Self::Double(v) if v.is_infinite() => json!({ "$InfNaN": v.signum() }),

@@ -24,7 +24,6 @@ impl Mongo {
     /// Polls the next `Event` from either of change streams.
     pub async fn next(&mut self) -> Result<Option<Event>, Error> {
         let Self { stream1, stream2 } = self;
-
         match stream2 {
             None => stream1.next().await.transpose(),
             Some(stream2) => tokio::select! {
