@@ -45,10 +45,14 @@ async fn main() {
         let events = replace(&mut batch, Vec::with_capacity(batch_size));
         let invocation = redis.script.new_invocation(&config, &events);
 
-        // Try to send. If it fails, immediately try again, since the `redis` crate will retry the connection (with a timeout)
-        if let Err(e) = redis.connection.publish(&invocation).await {
-            eprintln!("Redis error: {e:?}");
-            redis.connection.publish(&invocation).await.unwrap();
+        if let Err(err) = redis.connection.publish(&invocation).await {
+            // If the I/O failed, immediately try again, since the `redis` crate will retry the connection (with a timeout)
+            if err.is_io_error() {
+                eprintln!("Redis error: {err:?}");
+                redis.connection.publish(&invocation).await.unwrap();
+            } else {
+                panic!("{err:?}");
+            }
         }
     }
 }
