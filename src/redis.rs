@@ -1,7 +1,10 @@
 use std::time::Duration;
 
 use crate::{ejson::Ejson, event::Event, Config};
-use redis::{aio::ConnectionManager, Client, RedisError, Script};
+use redis::{
+    aio::{ConnectionManager, ConnectionManagerConfig},
+    Client, RedisError, Script,
+};
 
 const SCRIPT_WITH_DEDUPLICATION: &str = r#"
     for index = 1, tonumber(ARGV[1]) do
@@ -30,12 +33,10 @@ pub struct Redis {
 impl Redis {
     pub async fn new(config: &Config) -> Result<Self, RedisError> {
         let connection = Client::open(config.redis_url.as_str())?
-            .get_tokio_connection_manager_with_backoff_and_timeouts(
-                2,
-                100,
-                6,
-                Duration::from_secs(config.redis_response_timeout),
-                Duration::from_secs(config.redis_connection_timeout),
+            .get_connection_manager_with_config(
+                ConnectionManagerConfig::new()
+                    .set_response_timeout(Duration::from_secs(config.redis_response_timeout))
+                    .set_connection_timeout(Duration::from_secs(config.redis_connection_timeout)),
             )
             .await?;
 
