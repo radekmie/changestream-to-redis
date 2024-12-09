@@ -94,7 +94,27 @@ impl RedisConnection {
     pub async fn publish<'a>(
         &mut self,
         invocation: &ScriptInvocation<'a>,
+        config: &Config,
     ) -> Result<(), RedisError> {
-        invocation.invoke_async(&mut self.0).await
+        let mut last_result = invocation.invoke_async(&mut self.0).await;
+
+        for retry_count in 0..=config.redis_publish_retry_count {
+            let Err(err) = last_result else {
+                break;
+            };
+
+            // If the I/O failed, immediately try again, since the `redis` crate will retry the connection (with a timeout)
+            if err.is_io_error() {
+                eprintln!("Redis error ({retry_count}): {err:?}");
+                last_result = invocation.invoke_async(&mut self.0).await;
+                if last_result.is_ok() {
+                    eprintln!("Redis publication succeeded ({retry_count})");
+                }
+            } else {
+                panic!("{err:?}");
+            }
+        }
+
+        last_result
     }
 }

@@ -45,28 +45,10 @@ async fn main() {
         let events = replace(&mut batch, Vec::with_capacity(batch_size));
         let invocation = redis.script.new_invocation(&config, events);
 
-        {
-            let mut last_result = redis.connection.publish(&invocation).await;
-
-            for retry_count in 0..=config.redis_publish_retry_count {
-                let Err(err) = last_result else {
-                    break;
-                };
-
-                // If the I/O failed, immediately try again, since the `redis` crate will retry the connection (with a timeout)
-                if err.is_io_error() {
-                    eprintln!("Redis error ({retry_count}): {err:?}");
-                    last_result = redis.connection.publish(&invocation).await;
-                    if last_result.is_ok() {
-                        eprintln!("Redis publication succeeded ({retry_count})");
-                    }
-                } else {
-                    panic!("{err:?}");
-                }
-            }
-
-            // If the last result failed, something is wrong and we should stop
-            last_result.unwrap();
-        }
+        redis
+            .connection
+            .publish(&invocation, &config)
+            .await
+            .unwrap();
     }
 }
