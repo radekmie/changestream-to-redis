@@ -43,11 +43,12 @@ async fn main() {
         REDIS_COUNTER.inc_by(batch.len() as u64);
 
         let events = replace(&mut batch, Vec::with_capacity(batch_size));
+        let invocation = redis.script.new_invocation(&config, &events);
 
         // Try to send. If it fails, immediately try again, since the `redis` crate will retry the connection (with a timeout)
-        if let Err(e) = redis.publish(&config, &events).await {
+        if let Err(e) = redis.connection.publish(&invocation).await {
             eprintln!("Redis error: {e:?}");
-            redis.publish(&config, &events).await.unwrap();
+            redis.connection.publish(&invocation).await.unwrap();
         }
     }
 }

@@ -1,9 +1,11 @@
+#![allow(clippy::module_name_repetitions)]
+
 use std::time::Duration;
 
-use crate::{event::RedisEvent, Config};
+use crate::{event::Event, Config};
 use redis::{
     aio::{ConnectionManager, ConnectionManagerConfig},
-    Client, RedisError, Script,
+    Client, RedisError, Script, ScriptInvocation,
 };
 
 const SCRIPT_WITH_DEDUPLICATION: &str = r#"
@@ -25,45 +27,50 @@ const SCRIPT_WITHOUT_DEDUPLICATION: &str = r#"
     end
 "#;
 
+pub struct RedisScript(Script);
+pub struct RedisConnection(ConnectionManager);
+
 pub struct Redis {
-    connection: ConnectionManager,
-    script: Script,
+    pub connection: RedisConnection,
+    pub script: RedisScript,
 }
 
 impl Redis {
     pub async fn new(config: &Config) -> Result<Self, RedisError> {
-        let connection = Client::open(config.redis_url.as_str())?
-            .get_connection_manager_with_config(
-                ConnectionManagerConfig::new()
-                    .set_response_timeout(Duration::from_secs(config.redis_response_timeout))
-                    .set_connection_timeout(Duration::from_secs(config.redis_connection_timeout)),
-            )
-            .await?;
+        let connection = RedisConnection(
+            Client::open(config.redis_url.as_str())?
+                .get_connection_manager_with_config(
+                    ConnectionManagerConfig::new()
+                        .set_response_timeout(Duration::from_secs(config.redis_response_timeout))
+                        .set_connection_timeout(Duration::from_secs(
+                            config.redis_connection_timeout,
+                        )),
+                )
+                .await?,
+        );
 
         println!("Redis connection initialized.");
-        let script = Script::new(match config.deduplication {
+        let script = RedisScript(Script::new(match config.deduplication {
             None => SCRIPT_WITHOUT_DEDUPLICATION,
             Some(_) => SCRIPT_WITH_DEDUPLICATION,
-        });
+        }));
 
         Ok(Self { connection, script })
     }
+}
 
-    pub async fn publish(
-        &mut self,
-        config: &Config,
-        events: &[RedisEvent],
-    ) -> Result<(), RedisError> {
+impl RedisScript {
+    pub fn new_invocation(&self, config: &Config, events: &[Event]) -> ScriptInvocation {
         if config.debug {
-            for RedisEvent { ns, id, op, .. } in events {
+            for Event { ns, id, op, .. } in events {
                 println!("{ns}::{id} {op:?}");
             }
         }
 
-        let mut invocation = self.script.prepare_invoke();
+        let mut invocation = self.0.prepare_invoke();
         invocation.arg(events.len());
 
-        for RedisEvent { ev, ns, id, op, .. } in events {
+        for Event { ev, ns, id, op, .. } in events {
             invocation.arg(ns);
             invocation.arg(id);
             invocation.arg(op.to_string());
@@ -74,6 +81,15 @@ impl Redis {
             }
         }
 
-        invocation.invoke_async(&mut self.connection).await
+        invocation
+    }
+}
+
+impl RedisConnection {
+    pub async fn publish<'a>(
+        &mut self,
+        invocation: &ScriptInvocation<'a>,
+    ) -> Result<(), RedisError> {
+        invocation.invoke_async(&mut self.0).await
     }
 }
