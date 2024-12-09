@@ -43,7 +43,7 @@ async fn main() {
         REDIS_COUNTER.inc_by(batch.len() as u64);
 
         let events = replace(&mut batch, Vec::with_capacity(batch_size));
-        let invocation = redis.script.new_invocation(&config, &events);
+        let invocation = redis.script.new_invocation(&config, events);
 
         if let Err(err) = redis.connection.publish(&invocation).await {
             // If the I/O failed, immediately try again, since the `redis` crate will retry the connection (with a timeout)
