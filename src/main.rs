@@ -41,13 +41,8 @@ async fn main() {
     let mut batch = Vec::with_capacity(batch_size);
     while receiver.recv_many(&mut batch, batch_size).await != 0 {
         REDIS_COUNTER.inc_by(batch.len() as u64);
-
-        let events = replace(&mut batch, Vec::with_capacity(batch_size));
-        let invocation = redis.script.new_invocation(&config, events);
-
         redis
-            .connection
-            .publish(&invocation, &config)
+            .publish(&config, replace(&mut batch, Vec::with_capacity(batch_size)))
             .await
             .unwrap();
     }

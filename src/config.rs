@@ -1,6 +1,13 @@
 use mongodb::options::FullDocumentType;
+use redis::aio::ConnectionManagerConfig;
 use serde_json::from_str;
 use std::{env::var, time::Duration, vec::Vec};
+
+macro_rules! var_parse {
+    ($name:expr) => {
+        var($name).ok().map(|value| value.parse().unwrap())
+    };
+}
 
 pub struct Config {
     /// If true, all events are logged before being sent to Redis.
@@ -34,22 +41,18 @@ pub struct Config {
     pub metrics_address: Option<String>,
     pub mongo_url: String,
     pub redis_batch_size: usize,
+    #[expect(clippy::struct_field_names)]
+    pub redis_connection_manager_config: ConnectionManagerConfig,
+    pub redis_publish_retry_count: usize,
     pub redis_queue_size: usize,
     pub redis_url: String,
-    pub redis_response_timeout: Duration,
-    pub redis_connection_timeout: Duration,
-    pub redis_max_delay: Option<Duration>,
-    pub redis_connection_retry_count: usize,
-    pub redis_publish_retry_count: usize,
 }
 
 impl Config {
     pub fn from_env() -> Self {
         Self {
             debug: var("DEBUG").is_ok(),
-            deduplication: var("DEDUPLICATION")
-                .ok()
-                .map(|value| value.parse().unwrap()),
+            deduplication: var_parse!("DEDUPLICATION"),
             excluded_collections: var("EXCLUDED_COLLECTIONS")
                 .ok()
                 .map(|value| value.split(',').map(ToString::to_string).collect()),
@@ -61,32 +64,33 @@ impl Config {
                 .map(|value| value.split(',').map(ToString::to_string).collect()),
             metrics_address: var("METRICS_ADDRESS").ok(),
             mongo_url: var("MONGO_URL").expect("MONGO_URL is required"),
-            redis_batch_size: var("REDIS_BATCH_SIZE")
-                .ok()
-                .map_or(1, |value| value.parse().unwrap()),
-            redis_queue_size: var("REDIS_QUEUE_SIZE")
-                .ok()
-                .map_or(1024, |value| value.parse().unwrap()),
+            redis_batch_size: var_parse!("REDIS_BATCH_SIZE").unwrap_or(1),
+            redis_connection_manager_config: Self::redis_connection_manager_config_from_env(),
+            redis_publish_retry_count: var_parse!("REDIS_PUBLISH_RETRY_COUNT").unwrap_or(0),
+            redis_queue_size: var_parse!("REDIS_QUEUE_SIZE").unwrap_or(1024),
             redis_url: var("REDIS_URL").expect("REDIS_URL is required"),
-            redis_response_timeout: Duration::from_secs(
-                var("REDIS_RESPONSE_TIMEOUT_SECS")
-                    .ok()
-                    .map_or(5, |value| value.parse().unwrap()),
-            ),
-            redis_connection_timeout: Duration::from_secs(
-                var("REDIS_CONNECTION_TIMEOUT_SECS")
-                    .ok()
-                    .map_or(2, |value| value.parse().unwrap()),
-            ),
-            redis_max_delay: var("REDIS_MAX_DELAY_SECS")
-                .ok()
-                .map(|value| Duration::from_secs(value.parse().unwrap())),
-            redis_connection_retry_count: var("REDIS_CONNECTION_RETRY_COUNT")
-                .ok()
-                .map_or(6, |value| value.parse().unwrap()),
-            redis_publish_retry_count: var("REDIS_PUBLISH_RETRY_COUNT")
-                .ok()
-                .map_or(1, |value| value.parse().unwrap()),
         }
+    }
+
+    fn redis_connection_manager_config_from_env() -> ConnectionManagerConfig {
+        let mut config = ConnectionManagerConfig::new();
+        if let Some(x) = var_parse!("REDIS_CONNECTION_RETRY_COUNT") {
+            config = config.set_number_of_retries(x);
+        }
+
+        if let Some(x) = var_parse!("REDIS_CONNECTION_TIMEOUT_SECS").map(Duration::from_secs) {
+            config = config.set_connection_timeout(x);
+        }
+
+        #[expect(clippy::cast_possible_truncation)]
+        if let Some(x) = var_parse!("REDIS_MAX_DELAY_SECS").map(Duration::from_secs) {
+            config = config.set_max_delay(x.as_millis() as u64);
+        }
+
+        if let Some(x) = var_parse!("REDIS_RESPONSE_TIMEOUT_SECS").map(Duration::from_secs) {
+            config = config.set_response_timeout(x);
+        }
+
+        config
     }
 }

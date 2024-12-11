@@ -1,10 +1,5 @@
-#![allow(clippy::module_name_repetitions)]
-
 use crate::{ejson::Ejson, event::Event, Config};
-use redis::{
-    aio::{ConnectionManager, ConnectionManagerConfig},
-    Client, RedisError, Script, ScriptInvocation,
-};
+use redis::{aio::ConnectionManager, Client, RedisError, Script};
 
 const SCRIPT_WITH_DEDUPLICATION: &str = r#"
     for index = 1, tonumber(ARGV[1]) do
@@ -25,57 +20,40 @@ const SCRIPT_WITHOUT_DEDUPLICATION: &str = r#"
     end
 "#;
 
-pub struct RedisScript(Script);
-pub struct RedisConnection(ConnectionManager);
-
 pub struct Redis {
-    pub connection: RedisConnection,
-    pub script: RedisScript,
+    connection_manager: ConnectionManager,
+    script: Script,
 }
 
 impl Redis {
     pub async fn new(config: &Config) -> Result<Self, RedisError> {
-        let mut connection_config = ConnectionManagerConfig::new()
-            .set_response_timeout(config.redis_response_timeout)
-            .set_connection_timeout(config.redis_connection_timeout)
-            .set_number_of_retries(config.redis_connection_retry_count);
-
-        if let Some(max_delay) = config.redis_max_delay {
-            // The Redis crate internally converts this back into a Duration, so this should be fine
-            #[allow(clippy::cast_possible_truncation)]
-            let max_delay_ms = max_delay.as_millis() as u64;
-
-            connection_config = connection_config.set_max_delay(max_delay_ms);
-        }
-
-        let connection = RedisConnection(
-            Client::open(config.redis_url.as_str())?
-                .get_connection_manager_with_config(connection_config)
-                .await?,
-        );
+        let connection_manager = Client::open(config.redis_url.as_str())?
+            .get_connection_manager_with_config(config.redis_connection_manager_config.clone())
+            .await?;
 
         println!("Redis connection initialized.");
-        let script = RedisScript(Script::new(match config.deduplication {
+        let script = Script::new(match config.deduplication {
             None => SCRIPT_WITHOUT_DEDUPLICATION,
             Some(_) => SCRIPT_WITH_DEDUPLICATION,
-        }));
+        });
 
-        Ok(Self { connection, script })
+        Ok(Self {
+            connection_manager,
+            script,
+        })
     }
-}
 
-impl RedisScript {
-    pub fn new_invocation(&self, config: &Config, events: Vec<Event>) -> ScriptInvocation {
+    pub async fn publish(&mut self, config: &Config, events: Vec<Event>) -> Result<(), RedisError> {
         if config.debug {
-            for Event { ns, id, op, .. } in &events {
+            for Event { id, ns, op, .. } in &events {
                 println!("{ns}::{id} {}", op.clone().into_ejson());
             }
         }
 
-        let mut invocation = self.0.prepare_invoke();
+        let mut invocation = self.script.prepare_invoke();
         invocation.arg(events.len());
 
-        for Event { ev, ns, id, op, .. } in events {
+        for Event { ev, id, ns, op, .. } in events {
             invocation.arg(ns);
             invocation.arg(id);
             invocation.arg(op.into_ejson().to_string());
@@ -86,35 +64,24 @@ impl RedisScript {
             }
         }
 
-        invocation
-    }
-}
+        let retry_limit = config.redis_publish_retry_count;
+        for retry in 0..=retry_limit {
+            match invocation.invoke_async(&mut self.connection_manager).await {
+                Ok(()) => {
+                    if retry > 0 {
+                        eprintln!("Redis publication succeeded (retry #{retry})");
+                    }
 
-impl RedisConnection {
-    pub async fn publish<'a>(
-        &mut self,
-        invocation: &ScriptInvocation<'a>,
-        config: &Config,
-    ) -> Result<(), RedisError> {
-        let mut last_result = invocation.invoke_async(&mut self.0).await;
-
-        for retry_count in 0..=config.redis_publish_retry_count {
-            let Err(err) = last_result else {
-                break;
-            };
-
-            // If the I/O failed, immediately try again, since the `redis` crate will retry the connection (with a timeout)
-            if err.is_io_error() {
-                eprintln!("Redis error ({retry_count}): {err:?}");
-                last_result = invocation.invoke_async(&mut self.0).await;
-                if last_result.is_ok() {
-                    eprintln!("Redis publication succeeded ({retry_count})");
+                    return Ok(());
                 }
-            } else {
-                panic!("{err:?}");
+                // All I/O errors can be safely retried.
+                Err(error) if !error.is_io_error() || retry == retry_limit => return Err(error),
+                Err(error) => {
+                    eprintln!("Redis error (retry #{retry}): {error:?}");
+                }
             }
         }
 
-        last_result
+        unreachable!()
     }
 }

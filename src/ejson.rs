@@ -32,7 +32,7 @@ impl Ejson for Bson {
 
             // Replace everything else with `null`s.
             v => {
-                println!("Unrecognized BSON value found: {v}");
+                eprintln!("Unrecognized BSON value found: {v}");
                 Value::Null
             }
         }
