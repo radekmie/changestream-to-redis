@@ -1,4 +1,4 @@
-FROM rust:1.80.1 as builder
+FROM rust:1.81.0 as builder
 WORKDIR /usr/src
 RUN cargo new --bin changestream-to-redis
 COPY Cargo.toml Cargo.lock /usr/src/changestream-to-redis/
