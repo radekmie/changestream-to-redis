@@ -1,5 +1,5 @@
 use crate::{ejson::Ejson, event::Event, Config};
-use redis::{aio::MultiplexedConnection, Client, RedisError, Script};
+use redis::{aio::ConnectionManager, Client, RedisError, Script};
 
 const SCRIPT_WITH_DEDUPLICATION: &str = r#"
     for index = 1, tonumber(ARGV[1]) do
@@ -21,14 +21,14 @@ const SCRIPT_WITHOUT_DEDUPLICATION: &str = r#"
 "#;
 
 pub struct Redis {
-    connection: MultiplexedConnection,
+    connection_manager: ConnectionManager,
     script: Script,
 }
 
 impl Redis {
     pub async fn new(config: &Config) -> Result<Self, RedisError> {
-        let connection = Client::open(config.redis_url.as_str())?
-            .get_multiplexed_async_connection()
+        let connection_manager = Client::open(config.redis_url.as_str())?
+            .get_connection_manager_with_config(config.redis_connection_manager_config.clone())
             .await?;
 
         println!("Redis connection initialized.");
@@ -37,20 +37,23 @@ impl Redis {
             Some(_) => SCRIPT_WITH_DEDUPLICATION,
         });
 
-        Ok(Self { connection, script })
+        Ok(Self {
+            connection_manager,
+            script,
+        })
     }
 
     pub async fn publish(&mut self, config: &Config, events: Vec<Event>) -> Result<(), RedisError> {
         if config.debug {
-            for Event { ns, id, op, .. } in &events {
-                println!("{}::{} {}", ns, id, op.clone().into_ejson());
+            for Event { id, ns, op, .. } in &events {
+                println!("{ns}::{id} {}", op.clone().into_ejson());
             }
         }
 
         let mut invocation = self.script.prepare_invoke();
         invocation.arg(events.len());
 
-        for Event { ev, ns, id, op, .. } in events {
+        for Event { ev, id, ns, op, .. } in events {
             invocation.arg(ns);
             invocation.arg(id);
             invocation.arg(op.into_ejson().to_string());
@@ -61,6 +64,24 @@ impl Redis {
             }
         }
 
-        invocation.invoke_async(&mut self.connection).await
+        let retry_limit = config.redis_publish_retry_count;
+        for retry in 0..=retry_limit {
+            match invocation.invoke_async(&mut self.connection_manager).await {
+                Ok(()) => {
+                    if retry > 0 {
+                        eprintln!("Redis publication succeeded (retry #{retry})");
+                    }
+
+                    return Ok(());
+                }
+                // All I/O errors can be safely retried.
+                Err(error) if !error.is_io_error() || retry == retry_limit => return Err(error),
+                Err(error) => {
+                    eprintln!("Redis error (retry #{retry}): {error:?}");
+                }
+            }
+        }
+
+        unreachable!()
     }
 }

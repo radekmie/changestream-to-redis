@@ -29,13 +29,23 @@ This program listens to a [MongoDB Change Stream](https://www.mongodb.com/docs/m
         * If set, `changestream-to-redis` will expose Prometheus metrics at this address.
     * (optional) `REDIS_BATCH_SIZE`, default `1`.
         * If set, it overrides the default Redis batch size, leading to an increased throughput at a cost of increased latency (larger batches result in fewer but larger requests sent to Redis).
+    * (optional) `REDIS_CONNECTION_RETRY_COUNT`.
+        * [See docs](https://docs.rs/redis/0.27.5/redis/aio/struct.ConnectionManagerConfig.html#method.set_number_of_retries).
+    * (optional) `REDIS_CONNECTION_TIMEOUT_SECS`.
+        * [See docs](https://docs.rs/redis/0.27.5/redis/aio/struct.ConnectionManagerConfig.html#method.set_connection_timeout).
+    * (optional) `REDIS_MAX_DELAY_SECS`.
+        * [See docs](https://docs.rs/redis/0.27.5/redis/aio/struct.ConnectionManagerConfig.html#method.set_max_delay).
     * (optional) `REDIS_QUEUE_SIZE`, default `1024`.
         * If set, it overrides the default Redis queue size, accepting the MongoDB events earlier and temporarily storing them in memory.
+    * (optional) `REDIS_PUBLISH_RETRY_COUNT`, default `0`.
+        * The amount of times a publication to Redis can be retried.
+    * (optional) `REDIS_RESPONSE_TIMEOUT_SECS`.
+        * [See docs](https://docs.rs/redis/0.27.5/redis/aio/struct.ConnectionManagerConfig.html#method.set_response_timeout).
 
 ## Limitations
 
 * **No change stream resumption.** It is planned, but at the moment the program is entirely stateless.
-* **No error handling.** As soon as the change stream or Redis communication fails, the program exits. It is planned, though `changestream-to-redis` is meant to restart as soon as it exits.
+* **No MongoDB error handling.** As soon as the change stream fails, the program exits. It is planned, though `changestream-to-redis` is meant to restart as soon as it exits.
 
 ## Performance
 
