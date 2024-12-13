@@ -2,7 +2,7 @@
 edition = "2021"
 license = "MIT"
 name = "changestream-to-redis"
-version = "0.8.0"
+version = "0.8.1"
 
 [dependencies]
 base64 = { version = "0.22.1", default-features = false, features = ["alloc"] }
