@@ -4,19 +4,25 @@ use redis::{aio::ConnectionManager, Client, RedisError, Script};
 const SCRIPT_WITH_DEDUPLICATION: &str = r#"
     for index = 1, tonumber(ARGV[1]) do
         if redis.call("GET", KEYS[index]) == false then
-            local offset = index * 4 - 3
-            redis.call("SETEX", KEYS[index], ARGV[offset + 4], 1)
-            redis.call("PUBLISH", ARGV[offset + 1], ARGV[offset + 3])
-            redis.call("PUBLISH", ARGV[offset + 1] .. '::' .. ARGV[offset + 2], ARGV[offset + 3])
+            local offset = index * 6 - 5
+            redis.call("SETEX", KEYS[index], ARGV[offset + 6], 1)
+            redis.call("PUBLISH", ARGV[offset + 1] .. '.' .. ARGV[offset + 2], ARGV[offset + 5])
+            redis.call("PUBLISH", ARGV[offset + 1] .. '.' .. ARGV[offset + 2] .. '::' .. ARGV[offset + 4], ARGV[offset + 5])
+            for namespace in ARGV[offset + 3]:gmatch('[^,]+') do
+                redis.call("PUBLISH", ARGV[offset + 1] .. '.' .. namespace .. '::' .. ARGV[offset + 2], ARGV[offset + 5])
+            end
         end
     end
 "#;
 
 const SCRIPT_WITHOUT_DEDUPLICATION: &str = r#"
     for index = 1, tonumber(ARGV[1]) do
-        local offset = index * 3 - 2
-        redis.call("PUBLISH", ARGV[offset + 1], ARGV[offset + 3])
-        redis.call("PUBLISH", ARGV[offset + 1] .. '::' .. ARGV[offset + 2], ARGV[offset + 3])
+        local offset = index * 5 - 4
+        redis.call("PUBLISH", ARGV[offset + 1] .. '.' .. ARGV[offset + 2], ARGV[offset + 5])
+        redis.call("PUBLISH", ARGV[offset + 1] .. '.' .. ARGV[offset + 2] .. '::' .. ARGV[offset + 4], ARGV[offset + 5])
+        for namespace in ARGV[offset + 3]:gmatch('[^,]+') do
+            redis.call("PUBLISH", ARGV[offset + 1] .. '.' .. namespace .. '::' .. ARGV[offset + 2], ARGV[offset + 5])
+        end
     end
 "#;
 
@@ -45,22 +51,24 @@ impl Redis {
 
     pub async fn publish(&mut self, config: &Config, events: Vec<Event>) -> Result<(), RedisError> {
         if config.debug {
-            for Event { id, ns, op, .. } in &events {
-                println!("{ns}::{id} {}", op.clone().into_ejson());
+            for event in &events {
+                event.debug();
             }
         }
 
         let mut invocation = self.script.prepare_invoke();
         invocation.arg(events.len());
 
-        for Event { ev, id, ns, op, .. } in events {
-            invocation.arg(ns);
-            invocation.arg(id);
-            invocation.arg(op.into_ejson().to_string());
+        for event in events {
+            invocation.arg(event.db);
+            invocation.arg(event.collection);
+            invocation.arg(event.namespaces);
+            invocation.arg(event.document_id);
+            invocation.arg(event.operation.into_ejson().to_string());
 
             if let Some(deduplication) = config.deduplication {
                 invocation.arg(deduplication);
-                invocation.key(ev.to_string());
+                invocation.key(event.event_id.to_string());
             }
         }
 

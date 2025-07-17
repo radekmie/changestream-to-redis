@@ -1,7 +1,12 @@
 use crate::{config::Config, event::Event};
 use bson::doc;
 use futures_util::StreamExt;
-use mongodb::{change_stream::ChangeStream, error::Error, options::ChangeStreamOptions, Client};
+use mongodb::{
+    change_stream::ChangeStream,
+    error::Error,
+    options::{ChangeStreamOptions, FullDocumentType},
+    Client,
+};
 
 pub struct Mongo {
     stream1: ChangeStream<Event>,
@@ -41,16 +46,27 @@ async fn create_change_stream(
     primary: bool,
 ) -> Result<ChangeStream<Event>, Error> {
     // Only the primary stream will receive full documents, and only if the `full_document` is set.
-    let options = primary.then(|| {
-        ChangeStreamOptions::builder()
-            .full_document(config.full_document.clone())
-            .build()
-    });
+    // However, as `namespace_fields` requires the field values to work, it implies the least
+    // invasive mode available (i.e., `whenAvailable`) for all change streams.
+    let full_document = primary
+        .then(|| config.full_document.clone())
+        .flatten()
+        .or_else(|| {
+            config
+                .namespaces
+                .is_some()
+                .then_some(FullDocumentType::WhenAvailable)
+        });
 
     client
         .default_database()
         .expect("MONGO_URL is missing default database")
-        .watch(create_pipeline(config, primary), options)
+        .watch(
+            create_pipeline(config, primary),
+            ChangeStreamOptions::builder()
+                .full_document(full_document)
+                .build(),
+        )
         .await
         .map(ChangeStream::with_type)
 }
@@ -82,16 +98,40 @@ fn create_pipeline(config: &Config, primary: bool) -> [bson::Document; 2] {
         document = doc! {"$ifNull": ["$fullDocument", {"_id": document}]};
     }
 
+    // Comma separated list of namespaces (including array flattening).
+    let ns = config.namespaces.iter().flatten().fold(
+        doc! {"$literal": ""},
+        |initial_value, (collection, field)| {
+            let namespace = format!("{field}::");
+            let value = format!("$fullDocument.{field}");
+            doc! {"$reduce": {
+                "input": {"$cond": {
+                    "if": {"$eq": ["$ns.coll", collection]},
+                    "then": {"$let": {
+                        "vars": {"v": {"$ifNull": [value, []]}},
+                        "in": {"$cond": {
+                            "if": {"$isArray": "$$v"},
+                            "then": "$$v",
+                            "else": ["$$v"]
+                        }}
+                    }},
+                    "else": []
+                }},
+                "initialValue": initial_value,
+                "in": {"$concat": ["$$value", ",", namespace, {"$toString": "$$this"}]}
+            }}
+        },
+    );
+
     [
         doc! {"$match": query},
         doc! {"$project": {
-            "ct": "$clusterTime",
+            "c": "$ns.coll",
+            "d": "$ns.db",
             // The ID is stringified to support `ObjectID`s.
-            "id": {"$toString": "$documentKey._id"},
-            // All changes are published in their collection's channel and a subscope with
-            // their ID. We match the `cultofcoders:redis-oplog` format here.
-            "ns": {"$concat": ["$ns.db", ".", "$ns.coll"]},
-            "op": {
+            "i": {"$toString": "$documentKey._id"},
+            "n": ns,
+            "o": {
                 "e": {"$switch": {
                     "branches": [
                         {"case": {"$eq": ["$operationType", "delete"]}, "then": "r"},
@@ -101,7 +141,8 @@ fn create_pipeline(config: &Config, primary: bool) -> [bson::Document; 2] {
                 }},
                 "d": document,
                 "f": []
-            }
+            },
+            "t": "$clusterTime"
         }},
     ]
 }

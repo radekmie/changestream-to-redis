@@ -40,6 +40,10 @@ pub struct Config {
     /// address.
     pub metrics_address: Option<String>,
     pub mongo_url: String,
+    /// If set, `changestream-to-redis` will generate more Redis messages,
+    /// imitating the `namespaces` option set in all operations of the defined
+    /// collections.
+    pub namespaces: Option<Vec<(String, String)>>,
     pub redis_batch_size: usize,
     #[expect(clippy::struct_field_names)]
     pub redis_connection_manager_config: ConnectionManagerConfig,
@@ -64,6 +68,17 @@ impl Config {
                 .map(|value| value.split(',').map(ToString::to_string).collect()),
             metrics_address: var("METRICS_ADDRESS").ok(),
             mongo_url: var("MONGO_URL").expect("MONGO_URL is required"),
+            namespaces: var("NAMESPACES").ok().map(|value| {
+                value
+                    .split(',')
+                    .map(|namespace| match namespace.split_once('.') {
+                        None => panic!("Namespace has to include a dot (`.`)."),
+                        Some(("", _)) => panic!("Namespace's collection name cannot be empty."),
+                        Some((_, "")) => panic!("Namespace's field name cannot be empty."),
+                        Some((collection, field)) => (collection.to_string(), field.to_string()),
+                    })
+                    .collect()
+            }),
             redis_batch_size: var_parse!("REDIS_BATCH_SIZE").unwrap_or(1),
             redis_connection_manager_config: Self::redis_connection_manager_config_from_env(),
             redis_publish_retry_count: var_parse!("REDIS_PUBLISH_RETRY_COUNT").unwrap_or(0),

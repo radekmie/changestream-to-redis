@@ -31,7 +31,7 @@ async fn main() {
 
     spawn(async move {
         while let Some(event) = mongo.next().await.unwrap() {
-            LAST_EVENT_GAUGE.set(event.ct.time.into());
+            LAST_EVENT_GAUGE.set(event.timestamp.time.into());
             MONGO_COUNTER.inc();
             sender.send(event).await.unwrap();
         }
