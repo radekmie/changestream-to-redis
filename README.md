@@ -31,7 +31,7 @@ This program listens to a [MongoDB Change Stream](https://www.mongodb.com/docs/m
         * If set, `changestream-to-redis` will generate more Redis messages, imitating the [`namespaces`](https://github.com/cult-of-coders/redis-oplog/blob/master/docs/finetuning.md#namespacing) option set in all operations of the defined collections. The exact namespaces are calculated from the field values:
             * Example: `invoices.users` will add one `users::${user}` namespace for each `user` in its `users` field (assuming `users` is an array).
             * Example: `orders.companyId` will add one `companyId::${companyId}` namespace for its `companyId` field (assuming `companyId` is not an array).
-        * If set, all change streams will start with `fullDocument: whenAvailable` (or higher, if `FULL_DOCUMENT` is set).
+        * If set, all change streams will start with `fullDocument: updateLookup` (or whatever is set in `FULL_DOCUMENT`).
     * (optional) `REDIS_BATCH_SIZE`, default `1`.
         * If set, it overrides the default Redis batch size, leading to an increased throughput at a cost of increased latency (larger batches result in fewer but larger requests sent to Redis).
     * (optional) `REDIS_CONNECTION_RETRY_COUNT`.

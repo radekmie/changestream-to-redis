@@ -46,8 +46,8 @@ async fn create_change_stream(
     primary: bool,
 ) -> Result<ChangeStream<Event>, Error> {
     // Only the primary stream will receive full documents, and only if the `full_document` is set.
-    // However, as `namespace_fields` requires the field values to work, it implies the least
-    // invasive mode available (i.e., `whenAvailable`) for all change streams.
+    // However, as `namespace_fields` requires the field values to work, it implies `full_document`
+    // flag set.
     let full_document = primary
         .then(|| config.full_document.clone())
         .flatten()
@@ -55,7 +55,7 @@ async fn create_change_stream(
             config
                 .namespaces
                 .is_some()
-                .then_some(FullDocumentType::WhenAvailable)
+                .then_some(FullDocumentType::UpdateLookup)
         });
 
     client
