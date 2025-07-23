@@ -6,12 +6,27 @@ use prometheus::{
 use std::{convert::Infallible, sync::LazyLock};
 use tokio::{net::TcpListener, spawn};
 
-pub static LAST_EVENT_GAUGE: LazyLock<IntGauge> =
-    LazyLock::new(|| register_int_gauge!("last_event", "Timestamp of last MongoDB event").unwrap());
-pub static MONGO_COUNTER: LazyLock<IntCounter> =
-    LazyLock::new(|| register_int_counter!("mongo", "Number of MongoDB events").unwrap());
-pub static REDIS_COUNTER: LazyLock<IntCounter> =
-    LazyLock::new(|| register_int_counter!("redis", "Number of Redis invokes").unwrap());
+pub static LAST_EVENT_GAUGE: LazyLock<IntGauge> = LazyLock::new(|| {
+    register_int_gauge!(
+        "changestream_to_redis_last_mongo_event",
+        "Timestamp of last MongoDB event"
+    )
+    .unwrap()
+});
+pub static MONGO_COUNTER: LazyLock<IntCounter> = LazyLock::new(|| {
+    register_int_counter!(
+        "changestream_to_redis_mongo_events",
+        "Number of MongoDB events"
+    )
+    .unwrap()
+});
+pub static REDIS_COUNTER: LazyLock<IntCounter> = LazyLock::new(|| {
+    register_int_counter!(
+        "changestream_to_redis_redis_events",
+        "Number of Redis invokes"
+    )
+    .unwrap()
+});
 
 pub async fn serve(address: String) {
     let listener = TcpListener::bind(address).await.unwrap();
