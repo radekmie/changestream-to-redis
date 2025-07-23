@@ -4,7 +4,7 @@ use futures_util::StreamExt;
 use mongodb::{
     change_stream::ChangeStream,
     error::Error,
-    options::{ChangeStreamOptions, FullDocumentType},
+    options::{ChangeStreamOptions, FullDocumentBeforeChangeType, FullDocumentType},
     Client,
 };
 
@@ -65,6 +65,12 @@ async fn create_change_stream(
             create_pipeline(config, primary),
             ChangeStreamOptions::builder()
                 .full_document(full_document)
+                .full_document_before_change(
+                    config
+                        .namespaces
+                        .is_some()
+                        .then_some(FullDocumentBeforeChangeType::WhenAvailable),
+                )
                 .build(),
         )
         .await
@@ -95,7 +101,7 @@ fn create_pipeline(config: &Config, primary: bool) -> [bson::Document; 2] {
     // set; only `insert` will have it without `full_document` set).
     let mut document = doc! {"_id": "$documentKey._id"};
     if primary && (config.full_document.is_some() || config.full_document_collections.is_some()) {
-        document = doc! {"$ifNull": ["$fullDocument", {"_id": document}]};
+        document = doc! {"$ifNull": ["$fullDocument", {"$ifNull": ["$fullDocumentBeforeChange", {"_id": document}]}]};
     }
 
     // Comma separated list of namespaces (including array flattening).
@@ -103,12 +109,13 @@ fn create_pipeline(config: &Config, primary: bool) -> [bson::Document; 2] {
         doc! {"$literal": ""},
         |initial_value, (collection, field)| {
             let namespace = format!("{field}::");
-            let value = format!("$fullDocument.{field}");
+            let next_value = format!("$fullDocument.{field}");
+            let prev_value = format!("$fullDocumentBeforeChange.{field}");
             doc! {"$reduce": {
                 "input": {"$cond": {
                     "if": {"$eq": ["$ns.coll", collection]},
                     "then": {"$let": {
-                        "vars": {"v": {"$ifNull": [value, []]}},
+                        "vars": {"v": {"$ifNull": [next_value, {"$ifNull": [prev_value, []]}]}},
                         "in": {"$cond": {
                             "if": {"$isArray": "$$v"},
                             "then": "$$v",
