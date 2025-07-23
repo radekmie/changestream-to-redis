@@ -27,10 +27,11 @@ This program listens to a [MongoDB Change Stream](https://www.mongodb.com/docs/m
         * If set, there will be two change streams. First, listening to the configured collections, fetching full documents when available (i.e., inserts) and according to the `FULL_DOCUMENT` flag. Second will listen to other collections, fetching only their IDs.
     * (optional) `METRICS_ADDRESS`, e.g., `0.0.0.0:4000`.
         * If set, `changestream-to-redis` will expose Prometheus metrics at this address.
-    * (optional) `NAMESPACES`, e.g., `invoices.users,orders.companyId`.
+    * (optional) `NAMESPACES`, e.g., `invoices.users,jobs.roles,orders.companyId`.
         * If set, `changestream-to-redis` will generate more Redis messages, imitating the [`namespaces`](https://github.com/cult-of-coders/redis-oplog/blob/master/docs/finetuning.md#namespacing) option set in all operations of the defined collections. The exact namespaces are calculated from the field values:
             * Example: `invoices.users` will add one `users::${user}` namespace for each `user` in its `users` field (assuming `users` is an array).
-            * Example: `orders.companyId` will add one `companyId::${companyId}` namespace for its `companyId` field (assuming `companyId` is not an array).
+            * Example: `jobs.roles` will add one `roles::${id}` namespace for each `id` in its `roles` field keys (assuming `roles` is an object).
+            * Example: `orders.companyId` will add one `companyId::${companyId}` namespace for its `companyId` field (assuming `companyId` is not an array or an object).
         * If set, all change streams will start with `fullDocument: updateLookup` (or whatever is set in `FULL_DOCUMENT`) as well as `fullDocumentBeforeChange: whenAvailable`.
             * The latter is only needed for populating namespaces for document removals. If you subscribe to collections where documents can be removed, you may need to configure the [`changeStreamPreAndPostImages` and `changeStreamOptions`](https://www.mongodb.com/docs/manual/reference/command/collMod/#std-label-collMod-change-stream-pre-and-post-images).
     * (optional) `REDIS_BATCH_SIZE`, default `1`.

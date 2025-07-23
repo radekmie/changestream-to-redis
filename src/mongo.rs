@@ -116,10 +116,24 @@ fn create_pipeline(config: &Config, primary: bool) -> [bson::Document; 2] {
                     "if": {"$eq": ["$ns.coll", collection]},
                     "then": {"$let": {
                         "vars": {"v": {"$ifNull": [next_value, {"$ifNull": [prev_value, []]}]}},
-                        "in": {"$cond": {
-                            "if": {"$isArray": "$$v"},
-                            "then": "$$v",
-                            "else": ["$$v"]
+                        "in": {"$switch": {
+                            "branches": [
+                                // Arrays are flattened.
+                                {
+                                    "case": {"$eq": [{"$type": "$$v"}, "array"]},
+                                    "then": "$$v"
+                                },
+                                // Objects are mapped to their keys.
+                                {
+                                    "case": {"$eq": [{"$type": "$$v"}, "object"]},
+                                    "then": {"$map": {
+                                        "input": {"$objectToArray": "$$v"},
+                                        "in": "$$this.k"
+                                    }}
+                                },
+                            ],
+                            // Other values are left as-is.
+                            "default": ["$$v"]
                         }}
                     }},
                     "else": []
