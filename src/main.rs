@@ -16,7 +16,11 @@ mod redis;
 use crate::{config::Config, mongo::Mongo, redis::Redis};
 use metrics::{serve, LAST_EVENT_GAUGE, MONGO_COUNTER, REDIS_COUNTER};
 use std::mem::replace;
+use tikv_jemallocator::Jemalloc;
 use tokio::{main, spawn, sync::mpsc::channel};
+
+#[global_allocator]
+static GLOBAL: Jemalloc = Jemalloc;
 
 #[main]
 async fn main() {
