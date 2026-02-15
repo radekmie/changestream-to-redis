@@ -2,9 +2,10 @@ use crate::{config::Config, event::Event};
 use bson::doc;
 use futures_util::StreamExt;
 use mongodb::{
+    action::{Action, Watch},
     change_stream::ChangeStream,
     error::Error,
-    options::{ChangeStreamOptions, FullDocumentBeforeChangeType, FullDocumentType},
+    options::{FullDocumentBeforeChangeType, FullDocumentType},
     Client,
 };
 
@@ -61,20 +62,18 @@ async fn create_change_stream(
     client
         .default_database()
         .expect("MONGO_URL is missing default database")
-        .watch(
-            create_pipeline(config, primary),
-            ChangeStreamOptions::builder()
-                .batch_size(config.mongo_batch_size)
-                .full_document(full_document)
-                .full_document_before_change(
-                    config
-                        .namespaces
-                        .is_some()
-                        .then_some(FullDocumentBeforeChangeType::WhenAvailable),
-                )
-                .max_await_time(config.mongo_max_await_time)
-                .build(),
+        .watch()
+        .pipeline(create_pipeline(config, primary))
+        .optional(config.mongo_batch_size, Watch::batch_size)
+        .optional(full_document, Watch::full_document)
+        .optional(
+            config
+                .namespaces
+                .is_some()
+                .then_some(FullDocumentBeforeChangeType::WhenAvailable),
+            Watch::full_document_before_change,
         )
+        .optional(config.mongo_max_await_time, Watch::max_await_time)
         .await
         .map(ChangeStream::with_type)
 }

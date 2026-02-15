@@ -6,17 +6,17 @@ version = "0.9.4"
 
 [dependencies]
 base64 = { version = "0.22.1", default-features = false, features = ["alloc"] }
-bson = { version = "2.11.0", default-features = false }
-futures-util = { version = "0.3.28", default-features = false }
-hyper = { version = "1.3.1", default-features = false, features = ["http1", "server"] }
-hyper-util = { version = "0.1.5", default-features = false, features = ["tokio"] }
-mongodb = { version = "2.8.2", default-features = false, features = ["tokio-runtime"] }
-prometheus = { version = "0.13.4", default-features = false }
-redis = { version = "0.27.5", default-features = false, features = ["script", "tokio-comp", "connection-manager"] }
-serde = { version = "1.0.203", default-features = false, features = ["derive"] }
-serde_json = { version = "1.0.117", default-features = false }
+bson = { version = "3.1.0", default-features = false, features = ["compat-3-0-0"] }
+futures-util = { version = "0.3.31", default-features = false }
+hyper = { version = "1.8.1", default-features = false, features = ["http1", "server"] }
+hyper-util = { version = "0.1.20", default-features = false, features = ["tokio"] }
+mongodb = { version = "3.5.1", default-features = false, features = ["bson-3", "compat-3-3-0", "rustls-tls"] }
+prometheus = { version = "0.14.0", default-features = false }
+redis = { version = "1.0.3", default-features = false, features = ["connection-manager", "script", "tokio-comp"] }
+serde = { version = "1.0.228", default-features = false, features = ["derive"] }
+serde_json = { version = "1.0.149", default-features = false, features = ["std"] }
 tikv-jemallocator = { version = "0.6.1", default-features = false }
-tokio = { version = "1.38.0", default-features = false }
+tokio = { version = "1.49.0", default-features = false, features = ["macros", "rt", "rt-multi-thread"] }
 
 [profile.release]
 codegen-units = 1

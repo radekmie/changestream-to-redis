@@ -93,22 +93,20 @@ impl Config {
     }
 
     fn redis_connection_manager_config_from_env() -> ConnectionManagerConfig {
-        let mut config = ConnectionManagerConfig::new();
+        let mut config = ConnectionManagerConfig::new()
+            .set_connection_timeout(
+                var_parse!("REDIS_CONNECTION_TIMEOUT_SECS").map(Duration::from_secs),
+            )
+            .set_response_timeout(
+                var_parse!("REDIS_RESPONSE_TIMEOUT_SECS").map(Duration::from_secs),
+            );
+
         if let Some(x) = var_parse!("REDIS_CONNECTION_RETRY_COUNT") {
             config = config.set_number_of_retries(x);
         }
 
-        if let Some(x) = var_parse!("REDIS_CONNECTION_TIMEOUT_SECS").map(Duration::from_secs) {
-            config = config.set_connection_timeout(x);
-        }
-
-        #[expect(clippy::cast_possible_truncation)]
         if let Some(x) = var_parse!("REDIS_MAX_DELAY_SECS").map(Duration::from_secs) {
-            config = config.set_max_delay(x.as_millis() as u64);
-        }
-
-        if let Some(x) = var_parse!("REDIS_RESPONSE_TIMEOUT_SECS").map(Duration::from_secs) {
-            config = config.set_response_timeout(x);
+            config = config.set_max_delay(x);
         }
 
         config
