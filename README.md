@@ -28,9 +28,9 @@ This program listens to a [MongoDB Change Stream](https://www.mongodb.com/docs/m
     * (optional) `METRICS_ADDRESS`, e.g., `0.0.0.0:4000`.
         * If set, `changestream-to-redis` will expose Prometheus metrics at this address.
     * (optional) `MONGO_BATCH_SIZE`.
-        * [See docs](https://docs.rs/mongodb/2.8.2/mongodb/options/struct.ChangeStreamOptions.html#structfield.batch_size).
+        * [See docs](https://docs.rs/mongodb/3.5.1/mongodb/options/struct.ChangeStreamOptions.html#structfield.batch_size).
     * (optional) `MONGO_MAX_AWAIT_TIME_MILLIS`.
-        * [See docs](https://docs.rs/mongodb/2.8.2/mongodb/options/struct.ChangeStreamOptions.html#structfield.max_await_time).
+        * [See docs](https://docs.rs/mongodb/3.5.1/mongodb/options/struct.ChangeStreamOptions.html#structfield.max_await_time).
     * (optional) `NAMESPACES`, e.g., `invoices.users,jobs.roles,orders.companyId`.
         * If set, `changestream-to-redis` will generate more Redis messages, imitating the [`namespaces`](https://github.com/cult-of-coders/redis-oplog/blob/master/docs/finetuning.md#namespacing) option set in all operations of the defined collections. The exact namespaces are calculated from the field values:
             * Example: `invoices.users` will add one `users::${user}` namespace for each `user` in its `users` field (assuming `users` is an array).
@@ -41,17 +41,17 @@ This program listens to a [MongoDB Change Stream](https://www.mongodb.com/docs/m
     * (optional) `REDIS_BATCH_SIZE`, default `1`.
         * If set, it overrides the default Redis batch size, leading to an increased throughput at a cost of increased latency (larger batches result in fewer but larger requests sent to Redis).
     * (optional) `REDIS_CONNECTION_RETRY_COUNT`.
-        * [See docs](https://docs.rs/redis/0.27.5/redis/aio/struct.ConnectionManagerConfig.html#method.set_number_of_retries).
+        * [See docs](https://docs.rs/redis/1.0.3/redis/aio/struct.ConnectionManagerConfig.html#method.set_number_of_retries).
     * (optional) `REDIS_CONNECTION_TIMEOUT_SECS`.
-        * [See docs](https://docs.rs/redis/0.27.5/redis/aio/struct.ConnectionManagerConfig.html#method.set_connection_timeout).
+        * [See docs](https://docs.rs/redis/1.0.3/redis/aio/struct.ConnectionManagerConfig.html#method.set_connection_timeout).
     * (optional) `REDIS_MAX_DELAY_SECS`.
-        * [See docs](https://docs.rs/redis/0.27.5/redis/aio/struct.ConnectionManagerConfig.html#method.set_max_delay).
+        * [See docs](https://docs.rs/redis/1.0.3/redis/aio/struct.ConnectionManagerConfig.html#method.set_max_delay).
     * (optional) `REDIS_QUEUE_SIZE`, default `1024`.
         * If set, it overrides the default Redis queue size, accepting the MongoDB events earlier and temporarily storing them in memory.
     * (optional) `REDIS_PUBLISH_RETRY_COUNT`, default `0`.
         * The amount of times a publication to Redis can be retried.
     * (optional) `REDIS_RESPONSE_TIMEOUT_SECS`.
-        * [See docs](https://docs.rs/redis/0.27.5/redis/aio/struct.ConnectionManagerConfig.html#method.set_response_timeout).
+        * [See docs](https://docs.rs/redis/1.0.3/redis/aio/struct.ConnectionManagerConfig.html#method.set_response_timeout).
 
 ## Limitations
 
