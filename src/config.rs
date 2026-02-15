@@ -39,6 +39,8 @@ pub struct Config {
     /// If set, `changestream-to-redis` will expose Prometheus metrics at this
     /// address.
     pub metrics_address: Option<String>,
+    pub mongo_batch_size: Option<u32>,
+    pub mongo_max_await_time: Option<Duration>,
     pub mongo_url: String,
     /// If set, `changestream-to-redis` will generate more Redis messages,
     /// imitating the `namespaces` option set in all operations of the defined
@@ -67,6 +69,8 @@ impl Config {
                 .ok()
                 .map(|value| value.split(',').map(ToString::to_string).collect()),
             metrics_address: var("METRICS_ADDRESS").ok(),
+            mongo_batch_size: var_parse!("MONGO_BATCH_SIZE"),
+            mongo_max_await_time: var_parse!("MONGO_MAX_AWAIT_TIME").map(Duration::from_secs),
             mongo_url: var("MONGO_URL").expect("MONGO_URL is required"),
             namespaces: var("NAMESPACES").ok().map(|value| {
                 value

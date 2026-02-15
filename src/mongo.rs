@@ -64,6 +64,7 @@ async fn create_change_stream(
         .watch(
             create_pipeline(config, primary),
             ChangeStreamOptions::builder()
+                .batch_size(config.mongo_batch_size)
                 .full_document(full_document)
                 .full_document_before_change(
                     config
@@ -71,6 +72,7 @@ async fn create_change_stream(
                         .is_some()
                         .then_some(FullDocumentBeforeChangeType::WhenAvailable),
                 )
+                .max_await_time(config.mongo_max_await_time)
                 .build(),
         )
         .await
