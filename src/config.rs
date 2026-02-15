@@ -70,7 +70,8 @@ impl Config {
                 .map(|value| value.split(',').map(ToString::to_string).collect()),
             metrics_address: var("METRICS_ADDRESS").ok(),
             mongo_batch_size: var_parse!("MONGO_BATCH_SIZE"),
-            mongo_max_await_time: var_parse!("MONGO_MAX_AWAIT_TIME").map(Duration::from_secs),
+            mongo_max_await_time: var_parse!("MONGO_MAX_AWAIT_TIME_MILLIS")
+                .map(Duration::from_millis),
             mongo_url: var("MONGO_URL").expect("MONGO_URL is required"),
             namespaces: var("NAMESPACES").ok().map(|value| {
                 value

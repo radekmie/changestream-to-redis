@@ -29,7 +29,7 @@ This program listens to a [MongoDB Change Stream](https://www.mongodb.com/docs/m
         * If set, `changestream-to-redis` will expose Prometheus metrics at this address.
     * (optional) `MONGO_BATCH_SIZE`.
         * [See docs](https://docs.rs/mongodb/2.8.2/mongodb/options/struct.ChangeStreamOptions.html#structfield.batch_size).
-    * (optional) `MONGO_MAX_AWAIT_TIME`.
+    * (optional) `MONGO_MAX_AWAIT_TIME_MILLIS`.
         * [See docs](https://docs.rs/mongodb/2.8.2/mongodb/options/struct.ChangeStreamOptions.html#structfield.max_await_time).
     * (optional) `NAMESPACES`, e.g., `invoices.users,jobs.roles,orders.companyId`.
         * If set, `changestream-to-redis` will generate more Redis messages, imitating the [`namespaces`](https://github.com/cult-of-coders/redis-oplog/blob/master/docs/finetuning.md#namespacing) option set in all operations of the defined collections. The exact namespaces are calculated from the field values:
