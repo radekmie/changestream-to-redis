@@ -1,5 +1,6 @@
 use crate::ejson::Ejson;
 use bson::{Bson, Timestamp};
+use mongodb::change_stream::event::ResumeToken;
 use serde::Deserialize;
 
 #[derive(Deserialize)]
@@ -12,13 +13,16 @@ pub struct Event {
     pub document_id: String,
     #[expect(clippy::struct_field_names)]
     #[serde(rename = "_id")]
-    pub event_id: Bson,
+    pub event_id: ResumeToken,
     #[serde(rename = "n")]
     pub namespaces: String,
     #[serde(rename = "o")]
     pub operation: Bson,
     #[serde(rename = "t")]
     pub timestamp: Timestamp,
+    /// Which of the two change streams this event came from
+    #[serde(skip)]
+    pub is_primary: bool,
 }
 
 impl Event {

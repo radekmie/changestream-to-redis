@@ -1,5 +1,6 @@
 use crate::{ejson::Ejson, event::Event, Config};
-use redis::{aio::ConnectionManager, Client, RedisError, Script};
+use bson::serialize_to_bson;
+use redis::{aio::ConnectionManager, AsyncCommands, Client, RedisError, Script};
 
 const SCRIPT_WITH_DEDUPLICATION: &str = r#"
     for index = 1, tonumber(ARGV[1]) do
@@ -13,6 +14,10 @@ const SCRIPT_WITH_DEDUPLICATION: &str = r#"
             end
         end
     end
+    local token = ARGV[tonumber(ARGV[1]) * 6 + 2]
+    if token then
+        redis.call("SET", KEYS[tonumber(ARGV[1]) + 1], token)
+    end
 "#;
 
 const SCRIPT_WITHOUT_DEDUPLICATION: &str = r#"
@@ -23,6 +28,10 @@ const SCRIPT_WITHOUT_DEDUPLICATION: &str = r#"
         for namespace in ARGV[offset + 3]:gmatch('[^,]+') do
             redis.call("PUBLISH", ARGV[offset + 1] .. '.' .. namespace .. '::' .. ARGV[offset + 2], ARGV[offset + 5])
         end
+    end
+    local token = ARGV[tonumber(ARGV[1]) * 5 + 2]
+    if token then
+        redis.call("SET", KEYS[1], token)
     end
 "#;
 
@@ -49,7 +58,16 @@ impl Redis {
         })
     }
 
-    pub async fn publish(&mut self, config: &Config, events: Vec<Event>) -> Result<(), RedisError> {
+    pub async fn get(&mut self, key: &str) -> Result<Option<Vec<u8>>, RedisError> {
+        self.connection_manager.get(key).await
+    }
+
+    pub async fn publish(
+        &mut self,
+        config: &Config,
+        events: Vec<Event>,
+        token: Option<(String, Vec<u8>)>,
+    ) -> Result<(), RedisError> {
         if config.debug {
             for event in &events {
                 event.debug();
@@ -68,8 +86,17 @@ impl Redis {
 
             if let Some(deduplication) = config.deduplication {
                 invocation.arg(deduplication);
-                invocation.key(event.event_id.to_string());
+                invocation.key(
+                    serialize_to_bson(&event.event_id)
+                        .expect("event ID serialization failed")
+                        .to_string(),
+                );
             }
+        }
+
+        if let Some((key, value)) = token {
+            invocation.arg(value);
+            invocation.key(key);
         }
 
         let retry_limit = config.redis_publish_retry_count;
