@@ -54,8 +54,7 @@ pub struct Config {
     pub redis_url: String,
     /// If enabled, `changestream-to-redis` remembers its position in the change streams and resumes
     /// from it after a restart. If disabled, every start begins at the current position.
-    pub enable_session_resumption: bool,
-    pub resume_token_redis_key: String,
+    pub redis_resume_token_key: Option<String>,
 }
 
 impl Config {
@@ -93,9 +92,10 @@ impl Config {
             redis_publish_retry_count: var_parse!("REDIS_PUBLISH_RETRY_COUNT").unwrap_or(0),
             redis_queue_size: var_parse!("REDIS_QUEUE_SIZE").unwrap_or(1024),
             redis_url: var("REDIS_URL").expect("REDIS_URL is required"),
-            enable_session_resumption: var("ENABLE_SESSION_RESUMPTION").is_ok(),
-            resume_token_redis_key: var("RESUME_TOKEN_REDIS_KEY")
-                .unwrap_or_else(|_| "changestream-to-redis:resume-token".to_string()),
+            redis_resume_token_key: var("ENABLE_SESSION_RESUMPTION").ok().map(|_| {
+                var("REDIS_RESUME_TOKEN_KEY")
+                    .unwrap_or_else(|_| "changestream-to-redis:resume-token".to_string())
+            }),
         }
     }
 

@@ -4,7 +4,7 @@ use mongodb::change_stream::event::ResumeToken;
 use redis::RedisError;
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Default, Deserialize, Serialize)]
+#[derive(Default, Deserialize, Serialize)]
 pub struct Tokens {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     primary: Option<ResumeToken>,
@@ -28,10 +28,12 @@ impl Tokens {
     fn encode(&self) -> Vec<u8> {
         serialize_to_vec(self).expect("Resume token is not serializable")
     }
+}
 
-    fn decode(bytes: &[u8]) -> Self {
-        deserialize_from_slice(bytes)
-            .inspect_err(|e| eprintln!("Failed to decode resume token: {e}"))
+impl From<&[u8]> for Tokens {
+    fn from(value: &[u8]) -> Self {
+        deserialize_from_slice(value)
+            .inspect_err(|error| eprintln!("Failed to decode resume token: {error}"))
             .unwrap_or_default()
     }
 }
@@ -45,30 +47,27 @@ pub struct TokenStore {
 
 impl TokenStore {
     pub async fn from_config(config: &Config, redis: &mut Redis) -> Result<Self, RedisError> {
-        if !config.enable_session_resumption {
+        let Some(ref key) = config.redis_resume_token_key else {
             return Ok(Self::default());
-        }
+        };
 
-        let key = config.resume_token_redis_key.clone();
-
-        let tokens = redis.get(&key).await?.map_or_else(
+        let tokens = redis.get(key).await?.map_or_else(
             || {
-                // If not found, simply start from the current position, which is what a store-less run does anyway
                 println!(
                     "No change stream resume token found. Starting from the current position."
                 );
                 Tokens::default()
             },
             |bytes| {
-                println!("Resume token found! Resuming the change streams.");
-                Tokens::decode(&bytes)
+                println!("Resume token found... Resuming the change streams.");
+                Tokens::from(bytes.as_slice())
             },
         );
 
         Ok(Self {
-            enabled: config.enable_session_resumption,
+            key: key.clone(),
+            enabled: true,
             tokens,
-            key,
         })
     }
 
@@ -85,18 +84,23 @@ impl TokenStore {
             return;
         }
 
-        let cloned_tokens = self.tokens.clone();
+        let mut primary: Option<&ResumeToken> = None;
+        let mut secondary: Option<&ResumeToken> = None;
 
-        let mut secondary = cloned_tokens.secondary();
-        let mut primary = cloned_tokens.primary();
-
-        for event in events {
+        for event in events.iter().rev() {
             if event.is_primary {
-                primary = Some(&event.event_id);
+                primary.get_or_insert(&event.event_id);
             } else {
-                secondary = Some(&event.event_id);
+                secondary.get_or_insert(&event.event_id);
+            }
+
+            if primary.is_some() && secondary.is_some() {
+                break;
             }
         }
+
+        let primary = primary.or_else(|| self.tokens.primary());
+        let secondary = secondary.or_else(|| self.tokens.secondary());
 
         self.tokens = Tokens::new(primary.cloned(), secondary.cloned());
     }

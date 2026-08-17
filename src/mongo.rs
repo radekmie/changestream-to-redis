@@ -10,16 +10,16 @@ use mongodb::{
 };
 
 pub struct Mongo {
-    primary_stream: ChangeStream<Event>,
-    secondary_stream: Option<ChangeStream<Event>>,
+    stream1: ChangeStream<Event>,
+    stream2: Option<ChangeStream<Event>>,
 }
 
 impl Mongo {
     pub async fn new(config: &Config, token_store: &TokenStore) -> Result<Self, Error> {
         let tokens = token_store.get_tokens();
         let client = Client::with_uri_str(config.mongo_url.as_str()).await?;
-        let primary_stream = resume_change_stream(&client, config, true, tokens.primary()).await?;
-        let secondary_stream = match &config.full_document_collections {
+        let stream1 = resume_change_stream(&client, config, true, tokens.primary()).await?;
+        let stream2 = match &config.full_document_collections {
             None => None,
             Some(_) => {
                 Some(resume_change_stream(&client, config, false, tokens.secondary()).await?)
@@ -27,31 +27,28 @@ impl Mongo {
         };
 
         println!("Mongo connection initialized.");
-        Ok(Self {
-            primary_stream,
-            secondary_stream,
-        })
+        Ok(Self { stream1, stream2 })
     }
 
     /// Polls the next `Event` from either of change streams.
     pub async fn next(&mut self) -> Result<Option<Event>, Error> {
-        let Self {
-            primary_stream,
-            secondary_stream,
-        } = self;
-        let (event, is_primary) = match secondary_stream {
-            None => (primary_stream.next().await.transpose()?, true),
-            Some(secondary_stream) => tokio::select! {
+        let Self { stream1, stream2 } = self;
+        let event = match stream2 {
+            None => stream1.next().await.transpose()?.map(|event| Event {
+                is_primary: true,
+                ..event
+            }),
+            Some(stream2) => tokio::select! {
                 biased;
-                event = primary_stream.next() => (event.transpose()?, true),
-                event = secondary_stream.next() => (event.transpose()?, false),
+                event = stream1.next() => event.transpose()?.map(|event| Event {
+                    is_primary: true,
+                    ..event
+                }),
+                event = stream2.next() => event.transpose()?,
             },
         };
 
-        Ok(event.map(|event| Event {
-            is_primary,
-            ..event
-        }))
+        Ok(event)
     }
 }
 
@@ -62,27 +59,25 @@ async fn resume_change_stream(
     primary: bool,
     token: Option<&ResumeToken>,
 ) -> Result<ChangeStream<Event>, Error> {
-    fn unresumable_reason(error: &Error) -> Option<String> {
-        /// `ChangeStreamFatalError` and `ChangeStreamHistoryLost`. Both mean the stored token is no longer
-        /// in the oplog, i.e., we were down for longer than the oplog window.
-        const UNRESUMABLE_ERROR_CODES: [i32; 2] = [280, 286];
+    // `ChangeStreamFatalError` and `ChangeStreamHistoryLost`. Both mean the stored token is no longer
+    // in the oplog, i.e., we were down for longer than the oplog window.
+    const UNRESUMABLE_ERROR_CODES: [i32; 2] = [280, 286];
 
-        match &*error.kind {
+    match create_change_stream(client, config, primary, token.cloned()).await {
+        Ok(change_stream) => Ok(change_stream),
+        Err(error) => match error.kind.as_ref() {
             ErrorKind::Command(command) if UNRESUMABLE_ERROR_CODES.contains(&command.code) => {
-                Some(format!("{}, code {}", command.code_name, command.code))
+                eprintln!(
+                    "Cannot resume the change stream ({}, code {}). Events since the stored resume token were lost. Starting from the current position.",
+                    command.code_name,
+                    command.code
+                );
+
+                create_change_stream(client, config, primary, None).await
             }
-            _ => None,
-        }
+            _ => Err(error),
+        },
     }
-
-    let result = create_change_stream(client, config, primary, token.cloned()).await;
-
-    let Some(reason) = result.as_ref().err().and_then(unresumable_reason) else {
-        return result;
-    };
-
-    eprintln!("Cannot resume the change stream ({reason}). Events since the stored resume token were lost. Starting from the current position.");
-    create_change_stream(client, config, primary, None).await
 }
 
 async fn create_change_stream(

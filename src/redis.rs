@@ -3,7 +3,9 @@ use bson::serialize_to_bson;
 use redis::{aio::ConnectionManager, AsyncCommands, Client, RedisError, Script};
 
 const SCRIPT_WITH_DEDUPLICATION: &str = r#"
-    for index = 1, tonumber(ARGV[1]) do
+    local event_amount = tonumber(ARGV[1])
+
+    for index = 1, event_amount do
         if redis.call("GET", KEYS[index]) == false then
             local offset = index * 6 - 5
             redis.call("SETEX", KEYS[index], ARGV[offset + 6], 1)
@@ -14,14 +16,17 @@ const SCRIPT_WITH_DEDUPLICATION: &str = r#"
             end
         end
     end
-    local token = ARGV[tonumber(ARGV[1]) * 6 + 2]
+
+    local token = ARGV[event_amount * 6 + 2]
     if token then
-        redis.call("SET", KEYS[tonumber(ARGV[1]) + 1], token)
+        redis.call("SET", KEYS[event_amount + 1], token)
     end
 "#;
 
 const SCRIPT_WITHOUT_DEDUPLICATION: &str = r#"
-    for index = 1, tonumber(ARGV[1]) do
+    local event_amount = tonumber(ARGV[1])
+
+    for index = 1, event_amount do
         local offset = index * 5 - 4
         redis.call("PUBLISH", ARGV[offset + 1] .. '.' .. ARGV[offset + 2], ARGV[offset + 5])
         redis.call("PUBLISH", ARGV[offset + 1] .. '.' .. ARGV[offset + 2] .. '::' .. ARGV[offset + 4], ARGV[offset + 5])
@@ -29,7 +34,8 @@ const SCRIPT_WITHOUT_DEDUPLICATION: &str = r#"
             redis.call("PUBLISH", ARGV[offset + 1] .. '.' .. namespace .. '::' .. ARGV[offset + 2], ARGV[offset + 5])
         end
     end
-    local token = ARGV[tonumber(ARGV[1]) * 5 + 2]
+
+    local token = ARGV[event_amount * 5 + 2]
     if token then
         redis.call("SET", KEYS[1], token)
     end

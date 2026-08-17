@@ -55,7 +55,7 @@ This program listens to a [MongoDB Change Stream](https://www.mongodb.com/docs/m
     * (optional) `ENABLE_SESSION_RESUMPTION`
         * If not set, `changestream-to-redis` is stateless and every start begins at the current position. Restarts cause everything that happened while the service was down to be lost.
         * If set, it remembers its position of the change stream in Redis and resumes from there after a restart [see below](#resuming).
-    * (optional) `RESUME_TOKEN_REDIS_KEY`, default `changestream-to-redis:resume-token`.
+    * (optional) `REDIS_RESUME_TOKEN_KEY`, default `changestream-to-redis:resume-token`.
         * The key the resume token is stored under.
 
 ## Resuming
