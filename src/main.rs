@@ -12,9 +12,9 @@ mod event;
 mod metrics;
 mod mongo;
 mod redis;
-mod token;
+mod tokens;
 
-use crate::{config::Config, mongo::Mongo, redis::Redis, token::TokenStore};
+use crate::{config::Config, mongo::Mongo, redis::Redis};
 use metrics::{serve, LAST_EVENT_GAUGE, MONGO_COUNTER, REDIS_COUNTER};
 use std::mem::replace;
 use tikv_jemallocator::Jemalloc;
@@ -27,8 +27,9 @@ static GLOBAL: Jemalloc = Jemalloc;
 async fn main() {
     let mut config = Config::from_env();
     let mut redis = Redis::new(&config).await.unwrap();
-    let mut token_store = TokenStore::from_config(&config, &mut redis).await.unwrap();
-    let mut mongo = Mongo::new(&config, &token_store).await.unwrap();
+    let mut mongo = Mongo::new(&config, redis.get_resume_tokens())
+        .await
+        .unwrap();
     let (sender, mut receiver) = channel(config.redis_queue_size);
 
     if let Some(metrics_address) = config.metrics_address.take() {
@@ -48,13 +49,8 @@ async fn main() {
     while receiver.recv_many(&mut batch, batch_size).await != 0 {
         REDIS_COUNTER.inc_by(batch.len() as u64);
 
-        token_store.update(&batch);
         redis
-            .publish(
-                &config,
-                replace(&mut batch, Vec::with_capacity(batch_size)),
-                token_store.serialize(),
-            )
+            .publish(&config, replace(&mut batch, Vec::with_capacity(batch_size)))
             .await
             .unwrap();
     }

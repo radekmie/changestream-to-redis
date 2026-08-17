@@ -1,4 +1,4 @@
-use crate::{config::Config, event::Event, token::TokenStore};
+use crate::{config::Config, event::Event, tokens::ResumeTokens};
 use bson::doc;
 use futures_util::StreamExt;
 use mongodb::{
@@ -15,8 +15,7 @@ pub struct Mongo {
 }
 
 impl Mongo {
-    pub async fn new(config: &Config, token_store: &TokenStore) -> Result<Self, Error> {
-        let tokens = token_store.get_tokens();
+    pub async fn new(config: &Config, tokens: &ResumeTokens) -> Result<Self, Error> {
         let client = Client::with_uri_str(config.mongo_url.as_str()).await?;
         let stream1 = resume_change_stream(&client, config, true, tokens.primary()).await?;
         let stream2 = match &config.full_document_collections {
