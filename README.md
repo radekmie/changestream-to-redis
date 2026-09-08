@@ -52,21 +52,20 @@ This program listens to a [MongoDB Change Stream](https://www.mongodb.com/docs/m
         * The amount of times a publication to Redis can be retried.
     * (optional) `REDIS_RESPONSE_TIMEOUT_SECS`.
         * [See docs](https://docs.rs/redis/1.0.3/redis/aio/struct.ConnectionManagerConfig.html#method.set_response_timeout).
-    * (optional) `ENABLE_SESSION_RESUMPTION`
-        * If not set, `changestream-to-redis` is stateless and every start begins at the current position. Restarts cause everything that happened while the service was down to be lost.
-        * If set, it remembers its position of the change stream in Redis and resumes from there after a restart [see below](#resuming).
-    * (optional) `REDIS_RESUME_TOKEN_KEY`, default `changestream-to-redis:resume-token`.
+    * (optional) `REDIS_RESUME_TOKEN_KEY`, e.g., `changestream-to-redis:resume-token`.
         * The key the resume token is stored under.
+        * If not set, `changestream-to-redis` is stateless and every start begins at the current position of the change stream. Restarts cause everything that happened while the service was down to be lost.
+        * If set, it remembers its position of the change stream in Redis and resumes from there after a restart [see below](#resuming).
 
 ## Resuming
 
-Resumption is opt-in via `ENABLE_SESSION_RESUMPTION`. When enabled, `changestream-to-redis` remembers its position in the change stream in Redis and resumes from there after a restart.
+Resumption is opt-in via `REDIS_RESUME_TOKEN_KEY`. When enabled, `changestream-to-redis` remembers its position in the change stream in Redis and resumes from there after a restart.
 
 The token is written by appending a `SET` to the very same script call that publishes the batch, so it costs no additional round-trip and cannot get ahead of what was actually published.
 
 **Caveats**
 
-* **Redis**: The token is only as durable as your Redis configuration (a lost key simply means a cold start, i.e., the behaviour you get without `ENABLE_SESSION_RESUMPTION`). If Redis is configured with an eviction policy, the key can be evicted before it can be used to resume the change stream.
+* **Redis**: The token is only as durable as your Redis configuration (a lost key simply means a cold start, i.e., the behaviour you get without `REDIS_RESUME_TOKEN_KEY`). If Redis is configured with an eviction policy, the key can be evicted before it can be used to resume the change stream.
 
 * **MongoDB**: If the stored token is older than the oplog window (i.e., you were down for a long time), MongoDB refuses to resume. `changestream-to-redis` logs that, starts from the current position, and carries on rather than crash-looping. Those events are lost.
 

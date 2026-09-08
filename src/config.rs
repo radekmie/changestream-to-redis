@@ -92,10 +92,7 @@ impl Config {
             redis_publish_retry_count: var_parse!("REDIS_PUBLISH_RETRY_COUNT").unwrap_or(0),
             redis_queue_size: var_parse!("REDIS_QUEUE_SIZE").unwrap_or(1024),
             redis_url: var("REDIS_URL").expect("REDIS_URL is required"),
-            redis_resume_token_key: var("ENABLE_SESSION_RESUMPTION").ok().map(|_| {
-                var("REDIS_RESUME_TOKEN_KEY")
-                    .unwrap_or_else(|_| "changestream-to-redis:resume-token".to_string())
-            }),
+            redis_resume_token_key: var("REDIS_RESUME_TOKEN_KEY").ok(),
         }
     }
 

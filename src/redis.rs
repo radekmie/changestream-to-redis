@@ -1,6 +1,5 @@
 use crate::{ejson::Ejson, event::Event, tokens::ResumeTokens, Config};
 use bson::serialize_to_bson;
-use mongodb::change_stream::event::ResumeToken;
 use redis::{aio::ConnectionManager, AsyncCommands, Client, RedisError, Script};
 
 const SCRIPT_WITH_DEDUPLICATION: &str = r#"
@@ -64,20 +63,8 @@ impl Redis {
         let resume_tokens = match &config.redis_resume_token_key {
             None => ResumeTokens::default(),
             Some(key) => {
-                let result: Option<Vec<u8>> = connection_manager.get(key).await?;
-
-                result.map_or_else(
-                    || {
-                        println!(
-                            "No change stream resume token found. Starting from the current position."
-                        );
-                        ResumeTokens::default()
-                    },
-                    |bytes| {
-                        println!("Resume token found... Resuming the change streams.");
-                        ResumeTokens::from(bytes.as_slice())
-                    },
-                )
+                let value: Option<Vec<u8>> = connection_manager.get(key).await?;
+                value.as_deref().into()
             }
         };
 
@@ -100,7 +87,11 @@ impl Redis {
             }
         }
 
-        let resume_tokens = self.get_resume_tokens_from_events(&events);
+        let resume_tokens = if self.resume_token_key.is_some() {
+            ResumeTokens::from_events(&events, &self.resume_tokens)
+        } else {
+            self.resume_tokens.clone()
+        };
 
         let mut invocation = self.script.prepare_invoke();
         invocation.arg(events.len());
@@ -123,7 +114,8 @@ impl Redis {
         }
 
         if let Some(key) = &self.resume_token_key {
-            invocation.arg(resume_tokens.encode());
+            let value: Vec<_> = (&resume_tokens).into();
+            invocation.arg(value);
             invocation.key(key);
         }
 
@@ -147,31 +139,5 @@ impl Redis {
         }
 
         unreachable!()
-    }
-
-    fn get_resume_tokens_from_events(&self, events: &[Event]) -> ResumeTokens {
-        if self.resume_token_key.is_none() {
-            return self.resume_tokens.clone();
-        }
-
-        let mut primary: Option<&ResumeToken> = None;
-        let mut secondary: Option<&ResumeToken> = None;
-
-        for event in events.iter().rev() {
-            if event.is_primary {
-                primary.get_or_insert(&event.event_id);
-            } else {
-                secondary.get_or_insert(&event.event_id);
-            }
-
-            if primary.is_some() && secondary.is_some() {
-                break;
-            }
-        }
-
-        let primary = primary.or_else(|| self.resume_tokens.primary());
-        let secondary = secondary.or_else(|| self.resume_tokens.secondary());
-
-        ResumeTokens::new(primary.cloned(), secondary.cloned())
     }
 }

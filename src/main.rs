@@ -48,7 +48,6 @@ async fn main() {
     let mut batch = Vec::with_capacity(batch_size);
     while receiver.recv_many(&mut batch, batch_size).await != 0 {
         REDIS_COUNTER.inc_by(batch.len() as u64);
-
         redis
             .publish(&config, replace(&mut batch, Vec::with_capacity(batch_size)))
             .await
