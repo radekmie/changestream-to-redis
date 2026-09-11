@@ -1,8 +1,7 @@
+use crate::event::Event;
 use bson::{deserialize_from_slice, serialize_to_vec};
 use mongodb::change_stream::event::ResumeToken;
 use serde::{Deserialize, Serialize};
-
-use crate::event::Event;
 
 #[derive(Clone, Default, Deserialize, Serialize)]
 pub struct ResumeTokens {
@@ -37,12 +36,9 @@ impl ResumeTokens {
             }
         }
 
-        let primary = primary.or(fallback.primary.as_ref());
-        let secondary = secondary.or(fallback.secondary.as_ref());
-
         Self {
-            primary: primary.cloned(),
-            secondary: secondary.cloned(),
+            primary: primary.or_else(|| fallback.primary()).cloned(),
+            secondary: secondary.or_else(|| fallback.secondary()).cloned(),
         }
     }
 }
