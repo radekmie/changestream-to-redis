@@ -1,8 +1,11 @@
-use crate::{ejson::Ejson, event::Event, Config};
-use redis::{aio::ConnectionManager, Client, RedisError, Script};
+use crate::{ejson::Ejson, event::Event, tokens::ResumeTokens, Config};
+use bson::serialize_to_bson;
+use redis::{aio::ConnectionManager, AsyncCommands, Client, RedisError, Script};
 
 const SCRIPT_WITH_DEDUPLICATION: &str = r#"
-    for index = 1, tonumber(ARGV[1]) do
+    local event_amount = tonumber(ARGV[1])
+
+    for index = 1, event_amount do
         if redis.call("GET", KEYS[index]) == false then
             local offset = index * 6 - 5
             redis.call("SETEX", KEYS[index], ARGV[offset + 6], 1)
@@ -13,10 +16,17 @@ const SCRIPT_WITH_DEDUPLICATION: &str = r#"
             end
         end
     end
+
+    local token = ARGV[event_amount * 6 + 2]
+    if token then
+        redis.call("SET", KEYS[event_amount + 1], token)
+    end
 "#;
 
 const SCRIPT_WITHOUT_DEDUPLICATION: &str = r#"
-    for index = 1, tonumber(ARGV[1]) do
+    local event_amount = tonumber(ARGV[1])
+
+    for index = 1, event_amount do
         local offset = index * 5 - 4
         redis.call("PUBLISH", ARGV[offset + 1] .. '.' .. ARGV[offset + 2], ARGV[offset + 5])
         redis.call("PUBLISH", ARGV[offset + 1] .. '.' .. ARGV[offset + 2] .. '::' .. ARGV[offset + 4], ARGV[offset + 5])
@@ -24,16 +34,23 @@ const SCRIPT_WITHOUT_DEDUPLICATION: &str = r#"
             redis.call("PUBLISH", ARGV[offset + 1] .. '.' .. namespace .. '::' .. ARGV[offset + 2], ARGV[offset + 5])
         end
     end
+
+    local token = ARGV[event_amount * 5 + 2]
+    if token then
+        redis.call("SET", KEYS[1], token)
+    end
 "#;
 
 pub struct Redis {
     connection_manager: ConnectionManager,
+    resume_token_key: Option<String>,
+    resume_tokens: ResumeTokens,
     script: Script,
 }
 
 impl Redis {
     pub async fn new(config: &Config) -> Result<Self, RedisError> {
-        let connection_manager = Client::open(config.redis_url.as_str())?
+        let mut connection_manager = Client::open(config.redis_url.as_str())?
             .get_connection_manager_with_config(config.redis_connection_manager_config.clone())
             .await?;
 
@@ -43,10 +60,24 @@ impl Redis {
             Some(_) => SCRIPT_WITH_DEDUPLICATION,
         });
 
+        let resume_tokens = match &config.redis_resume_token_key {
+            None => ResumeTokens::default(),
+            Some(key) => {
+                let value: Option<Vec<u8>> = connection_manager.get(key).await?;
+                value.as_deref().into()
+            }
+        };
+
         Ok(Self {
+            resume_token_key: config.redis_resume_token_key.clone(),
             connection_manager,
+            resume_tokens,
             script,
         })
+    }
+
+    pub const fn get_resume_tokens(&self) -> &ResumeTokens {
+        &self.resume_tokens
     }
 
     pub async fn publish(&mut self, config: &Config, events: Vec<Event>) -> Result<(), RedisError> {
@@ -55,6 +86,12 @@ impl Redis {
                 event.debug();
             }
         }
+
+        let resume_tokens = if self.resume_token_key.is_some() {
+            ResumeTokens::from_events(&events, &self.resume_tokens)
+        } else {
+            self.resume_tokens.clone()
+        };
 
         let mut invocation = self.script.prepare_invoke();
         invocation.arg(events.len());
@@ -68,8 +105,18 @@ impl Redis {
 
             if let Some(deduplication) = config.deduplication {
                 invocation.arg(deduplication);
-                invocation.key(event.event_id.to_string());
+                invocation.key(
+                    serialize_to_bson(&event.event_id)
+                        .expect("event ID serialization failed")
+                        .to_string(),
+                );
             }
+        }
+
+        if let Some(key) = &self.resume_token_key {
+            let value: Vec<_> = (&resume_tokens).into();
+            invocation.arg(value);
+            invocation.key(key);
         }
 
         let retry_limit = config.redis_publish_retry_count;
@@ -80,6 +127,7 @@ impl Redis {
                         eprintln!("Redis publication succeeded (retry #{retry})");
                     }
 
+                    self.resume_tokens = resume_tokens;
                     return Ok(());
                 }
                 // All I/O errors can be safely retried.

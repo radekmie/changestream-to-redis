@@ -52,6 +52,9 @@ pub struct Config {
     pub redis_publish_retry_count: usize,
     pub redis_queue_size: usize,
     pub redis_url: String,
+    /// If enabled, `changestream-to-redis` remembers its position in the change streams and resumes
+    /// from it after a restart. If disabled, every start begins at the current position.
+    pub redis_resume_token_key: Option<String>,
 }
 
 impl Config {
@@ -89,6 +92,7 @@ impl Config {
             redis_publish_retry_count: var_parse!("REDIS_PUBLISH_RETRY_COUNT").unwrap_or(0),
             redis_queue_size: var_parse!("REDIS_QUEUE_SIZE").unwrap_or(1024),
             redis_url: var("REDIS_URL").expect("REDIS_URL is required"),
+            redis_resume_token_key: var("REDIS_RESUME_TOKEN_KEY").ok(),
         }
     }
 

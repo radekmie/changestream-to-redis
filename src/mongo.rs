@@ -1,10 +1,10 @@
-use crate::{config::Config, event::Event};
+use crate::{config::Config, event::Event, tokens::ResumeTokens};
 use bson::doc;
 use futures_util::StreamExt;
 use mongodb::{
     action::{Action, Watch},
-    change_stream::ChangeStream,
-    error::Error,
+    change_stream::{event::ResumeToken, ChangeStream},
+    error::{Error, ErrorKind},
     options::{FullDocumentBeforeChangeType, FullDocumentType},
     Client,
 };
@@ -15,12 +15,14 @@ pub struct Mongo {
 }
 
 impl Mongo {
-    pub async fn new(config: &Config) -> Result<Self, Error> {
+    pub async fn new(config: &Config, tokens: &ResumeTokens) -> Result<Self, Error> {
         let client = Client::with_uri_str(config.mongo_url.as_str()).await?;
-        let stream1 = create_change_stream(&client, config, true).await?;
+        let stream1 = resume_change_stream(&client, config, true, tokens.primary()).await?;
         let stream2 = match &config.full_document_collections {
             None => None,
-            Some(_) => Some(create_change_stream(&client, config, false).await?),
+            Some(_) => {
+                Some(resume_change_stream(&client, config, false, tokens.secondary()).await?)
+            }
         };
 
         println!("Mongo connection initialized.");
@@ -30,14 +32,50 @@ impl Mongo {
     /// Polls the next `Event` from either of change streams.
     pub async fn next(&mut self) -> Result<Option<Event>, Error> {
         let Self { stream1, stream2 } = self;
-        match stream2 {
-            None => stream1.next().await.transpose(),
+        let event = match stream2 {
+            None => stream1.next().await.transpose()?.map(|event| Event {
+                is_primary: true,
+                ..event
+            }),
             Some(stream2) => tokio::select! {
                 biased;
-                event = stream1.next() => event.transpose(),
-                event = stream2.next() => event.transpose(),
+                event = stream1.next() => event.transpose()?.map(|event| Event {
+                    is_primary: true,
+                    ..event
+                }),
+                event = stream2.next() => event.transpose()?,
             },
-        }
+        };
+
+        Ok(event)
+    }
+}
+
+/// Starts a change stream at `token`, falling back to the current position if the token is too old to resume from.
+async fn resume_change_stream(
+    client: &Client,
+    config: &Config,
+    primary: bool,
+    token: Option<&ResumeToken>,
+) -> Result<ChangeStream<Event>, Error> {
+    // `ChangeStreamFatalError` and `ChangeStreamHistoryLost`. Both mean the stored token is no longer
+    // in the oplog, i.e., we were down for longer than the oplog window.
+    const UNRESUMABLE_ERROR_CODES: [i32; 2] = [280, 286];
+
+    match create_change_stream(client, config, primary, token.cloned()).await {
+        Ok(change_stream) => Ok(change_stream),
+        Err(error) => match error.kind.as_ref() {
+            ErrorKind::Command(command) if UNRESUMABLE_ERROR_CODES.contains(&command.code) => {
+                eprintln!(
+                    "Cannot resume the change stream ({}, code {}). Events since the stored resume token were lost. Starting from the current position.",
+                    command.code_name,
+                    command.code
+                );
+
+                create_change_stream(client, config, primary, None).await
+            }
+            _ => Err(error),
+        },
     }
 }
 
@@ -45,6 +83,7 @@ async fn create_change_stream(
     client: &Client,
     config: &Config,
     primary: bool,
+    token: Option<ResumeToken>,
 ) -> Result<ChangeStream<Event>, Error> {
     // Only the primary stream will receive full documents, and only if the `full_document` is set.
     // However, as `namespace_fields` requires the field values to work, it implies `full_document`
@@ -74,6 +113,7 @@ async fn create_change_stream(
             Watch::full_document_before_change,
         )
         .optional(config.mongo_max_await_time, Watch::max_await_time)
+        .optional(token, Watch::start_after)
         .await
         .map(ChangeStream::with_type)
 }

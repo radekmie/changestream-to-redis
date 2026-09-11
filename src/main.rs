@@ -12,6 +12,7 @@ mod event;
 mod metrics;
 mod mongo;
 mod redis;
+mod tokens;
 
 use crate::{config::Config, mongo::Mongo, redis::Redis};
 use metrics::{serve, LAST_EVENT_GAUGE, MONGO_COUNTER, REDIS_COUNTER};
@@ -25,8 +26,10 @@ static GLOBAL: Jemalloc = Jemalloc;
 #[main]
 async fn main() {
     let mut config = Config::from_env();
-    let mut mongo = Mongo::new(&config).await.unwrap();
     let mut redis = Redis::new(&config).await.unwrap();
+    let mut mongo = Mongo::new(&config, redis.get_resume_tokens())
+        .await
+        .unwrap();
     let (sender, mut receiver) = channel(config.redis_queue_size);
 
     if let Some(metrics_address) = config.metrics_address.take() {
